@@ -1525,15 +1525,20 @@ def get_random_times_outside_locs_selected(locs_selected,
     #
     random_selected = []
     for k in range(10000):
+        # generate a random time within a 1200 sec window and then shift it by the window being analyzed to make
+        #  sure we can get to at least -30sec (for example)
         time = np.random.rand()*1200 + self.n_sec_window  # assumes data chunk is at least 1200 seconds
 
+        # check to ensure that the selected time is far enough from the nearest lever pull locs
         if np.min(np.abs(time-locs_selected))>random_lockout:
             random_selected.append(time)
 
+        # check whether we have anough random triggers
         if len(random_selected)==data_stm.shape[0]:
             # print ("Found sufficient randomized data chunks")
             break
 
+    #
     if k==10000:
         print ("Not enough random data chunkcs could not be generated with lockout window size: ",
                self.random_events_lockout)

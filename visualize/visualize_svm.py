@@ -458,6 +458,19 @@ class Visualize():
         print ("DATA; ", self.data.shape)
 
         #################################################
+        ### PAD DATA WITH  SVM SLDING WINDOW ############
+        #################################################
+
+        if self.ideal_window_flag:
+            print ("self.sig_sav: ", self.sig_save.shape)
+            print ("original len data: ", self.data.shape)
+            print ('self.sliding_window: ', self.sliding_window)
+
+            pad = np.zeros((self.sliding_window, self.data.shape[1]), dtype=np.float32)
+            self.data = np.vstack((pad, self.data))
+            print (" padded  data: ", self.data.shape)
+
+        #################################################
         ### LOAD SHIFTS BETWEEN LEVER AND CALCIUM #######
         #################################################
         if self.dlc_offset_flag:
@@ -523,12 +536,16 @@ class Visualize():
         print (" post trials data size ", self.data.shape)
         print ("      n-trials: ", self.n_trials)
 
-
         #
         if self.n_trials<self.min_trials:
             print ("Insufficient trials...", self.n_trials)
             self.data = np.zeros((0))
             return
+
+        #################################################
+        ######### COMPUTE MEAN AND STD ##################
+        #################################################
+
 
         #
         mean = self.data.mean(1)
@@ -667,6 +684,7 @@ class Visualize():
         self.sig_save = np.array(sig).copy()
         #print ("Self sig save: ", self.sig_save.shape)
 
+
         # multiple hypothesis test Benjamini-Hockberg
         temp = np.array(sig)
         #print ("data into multi-hypothesis tes:", temp.shape)
@@ -707,7 +725,7 @@ class Visualize():
 
         self.earliest_continuous = -(self.sig.shape[1]-earliest_continuous)/30.
 
-        self.edt = -(self.sig.shape[1]-earliest_continuous)/30.
+        self.edt = self.earliest_continuous
 
         #print (" signianc n-trials: ", self.n_trials)
 
@@ -716,9 +734,11 @@ class Visualize():
     def compute_first_decoding_time_ROI(self):
 
         #
-
         fname_out = os.path.join(self.main_dir, self.animal_id,
                          'first_decoding_time_'+self.code+'.npz')
+
+        if self.ideal_window_flag==True:
+            fname_out = fname_out.replace('.npz','_ideal_window.npz')
 
         if os.path.exists(fname_out) and self.overwrite==False:
             return
@@ -773,16 +793,21 @@ class Visualize():
                 continue
 
             #
-            res_continuous.append(temp)
+            res_continuous.append(self.edt)
 
+            ########################################
+            ########################################
             # find aboslute earliest
             k_earliest = self.sig.shape[0]
             for k in range(self.sig.shape[0]-1,0,-1):
                 if np.isnan(self.sig[k])==True:
                     k_earliest = k
-            res_earliest.append(-self.window+k_earliest/self.imaging_rate)
 
-            #
+            earliest_temp = -self.window+k_earliest/self.imaging_rate
+            res_earliest.append(earliest_temp)
+
+            ########################################
+            ########################################
             session_nos.append(p)
 
             #
@@ -791,7 +816,7 @@ class Visualize():
             #
             n_trials.append(self.n_trials)
             n_good_sessions+=1
-            print (" ... finished session...")
+            print (" ... finished session...edt: ", self.edt)
             print ('')
 
 
@@ -821,13 +846,15 @@ class Visualize():
             self.lockout=lockout
 
             #
-            #
             if self.lockout==True:
                 fname_out = os.path.join(self.main_dir, self.animal_id,
                              'first_decoding_time_lockout.npz')
             else:
                 fname_out = os.path.join(self.main_dir, self.animal_id,
                              'first_decoding_time.npz')
+
+            if self.ideal_window_flag==True:
+                fname_out = fname_out.replace('.npz','_ideal_window.npz')
 
             res_continuous = []
             res_earliest = []
@@ -842,14 +869,17 @@ class Visualize():
             #
             n_good_sessions = 0
             for p in range(len(self.session_ids)):
+            #for p in range(len(self.fnames_svm)):
                 self.session_id = self.session_ids[p]
 
                 #
                 self.fname = self.fnames_svm[p]
                 print ("self.fname: ", self.fname)
+                self.sliding_window = self.ideal_sliding_windows[p]
 
+                #
                 self.process_session()
-                # print ("a: ", a, self.session_id, self.data.shape)
+
                 #
                 if self.data.shape[0] == 0:
                     continue
@@ -1042,6 +1072,8 @@ class Visualize():
         #
         linewidth=5
         temp = data['all_res_continuous']
+
+        print("temp data allrescontinuous: ", temp.shape)
 
         #print ("data['all_res_continuous']: ", temp)
         all_res_continuous_all = np.array(temp)+shift
@@ -1702,9 +1734,9 @@ class Visualize():
         #
         self.fnames_svm = []
         self.session_ids = []
+        self.ideal_sliding_windows = []
         for k in range(len(self.sessions)):
             self.session = os.path.split(self.sessions[k])[1][:-4]
-            self.session_ids.append(self.session)
 
             if self.concatenated_flag==True:
                 fname = os.path.join(self.main_dir, self.animal_id,
@@ -1713,13 +1745,16 @@ class Visualize():
                      self.session+
                      '_globalPca_min_trials_concatenated200_code_04_30sec_accuracy.npz'
                      )
-            else:
+                self.ideal_sliding_windows.append(self.sliding_window)
+
+            elif self.regular_flag==True:
                 # animal IA1 has data in the SVM-prediction directory
                 fname = os.path.join(self.main_dir, self.animal_id,
                                      'SVM_Scores/SVM_Scores_'+prefix3+
-                                     self.session+"_"+
+                                     self.session+
                                      self.code+prefix1+'_trial_ROItimeCourses_30sec_Xvalid10_Slidewindow30.npz')
 
+                #
                 # data is in the main tif-file session directory
                 if os.path.exists(fname)==False:
                     print ("    missing svm_scores results: ", fname)
@@ -1727,6 +1762,28 @@ class Visualize():
                                          self.session,
                                          self.session + "_"+
                                          self.code+prefix1+'_trial_ROItimeCourses_30sec_Xvalid10_Slidewindow30.npz')
+                self.ideal_sliding_windows.append(self.sliding_window)
+
+            elif self.ideal_window_flag==True:
+                #
+                fname_ideal_len = os.path.join(self.main_dir, self.animal_id,'tif_files',self.session,
+                                         self.session+"_ideal_window_len.npy")
+                try:
+                    self.sliding_window = np.load(fname_ideal_len)[0]
+                    self.ideal_sliding_windows.append(self.sliding_window)
+                except:
+                    print (" No ideal sliding window computed, skipping", fname_ideal_len)
+                    continue
+
+                print ("IDEAL SLIDING WINDOW: ", self.sliding_window)
+
+                fname = os.path.join(self.main_dir, self.animal_id,
+                                     'SVM_Scores/SVM_Scores_'+prefix3+
+                                     self.session+
+                                     self.code+prefix1+'_trial_ROItimeCourses_30sec_Xvalid10_Slidewindow'+
+                                     str(self.sliding_window)+'.npz')
+
+            self.session_ids.append(self.session)
 
             self.fnames_svm.append(fname)
 
@@ -2194,10 +2251,7 @@ def get_lever_offset(main_dir,
 
     return lever_offset
 
-
-
-
-
+#
 def get_sessions(main_dir,
                  animal_id,
                  session_id):

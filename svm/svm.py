@@ -1529,7 +1529,19 @@ class PredictSVMChoice():
         #
         prefix3 = self.correlation_prefix
 
+
         for s in range(len(self.sessions)):
+
+            if self.ideal_window_flag:
+                try:
+                    fname_ideal_len = os.path.join(self.root_dir, self.animal_id,'tif_files',self.sessions[s],
+                                         self.sessions[s]+"_ideal_window_len.npy")
+                    self.sliding_window = np.load(fname_ideal_len)[0]
+                except:
+                    print (" No ideal sliding window computed, skipping")
+                    continue
+
+                print ("IDEAL SLIDING WINDOW: ", self.sliding_window)
             #
             fname_out = os.path.join(self.root_dir, self.animal_id,'SVM_Scores',
                                  'SVM_Scores_'+
