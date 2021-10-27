@@ -11,6 +11,7 @@ import pickle
 import torch
 import pickle as pk
 import pycorrelate
+import thundersvm
 
 import sklearn
 from sklearn.preprocessing import StandardScaler
@@ -46,7 +47,7 @@ class PredictMultiState():
                         'code_04',
                         'code_04_lockout']
 
-        self.imaging_rate = 30
+        #self.imaging_rate = 30
 
 
     def get_sessions(self):
@@ -292,7 +293,7 @@ def get_lever_offset_seconds(main_dir,
                     #self.aligned_images = self.aligned_images[k:]
                     end_blue = k
                     break
-        else:                                                           #Case #2: start with light off; remove starting and end chunks;
+        else:                                                           #Case #2 - much more common : start with light off; remove starting and end chunks;
             #Find first light on
             for k in range(len(aligned_images)):
                 if np.average(aligned_images[k])> blue_light_threshold:
@@ -468,29 +469,29 @@ def run_10fold_multi_class(k,
     print ("X_train: ", X_train.shape, " y_train: ", y_train.shape)
     print ("  y_test:   ", y_test)
 
-    # RAPLACE DATA
-    if False:
-        r = np.load('/media/cat/4TBSSD/yuki/IJ2/tif_files/IJ2pm_Feb5_30Hz/IJ2pm_Feb5_30Hz_code_04_random_ROItimeCourses_30sec_pca_0.95.npy')
-        r = r[:,:,:900]
-        print ("Random: ", r.shape)
-
-        #
-        t = np.load('/media/cat/4TBSSD/yuki/IJ2/tif_files/IJ2pm_Feb5_30Hz/IJ2pm_Feb5_30Hz_code_04_trial_ROItimeCourses_30sec_pca_0.95.npy')
-        t = t[:,:,:900]
-        print ("trials: ", t.shape)
-
-        window_start = 750
-        window_len = 30
-        X_train = np.vstack((t[:40,:,window_start:window_start+window_len].reshape(40,-1),
-                             r[:40,:,window_start:window_start+window_len].reshape(40,-1)))
-        print ("X_TRAIN: ", X_train.shape)
-        y_train = np.hstack((np.ones(40), np.zeros(40)))
-
-        X_test = np.vstack((t[40:,:,window_start:window_start+window_len].reshape(12,-1),
-                            r[40:,:,window_start:window_start+window_len].reshape(12,-1)))
-        y_test = np.hstack((np.ones(12), np.zeros(12)))
-        print ("X_TEST: ", X_test.shape)
-        print ("y_test:     ", y_test)
+    # # RAPLACE DATA
+    # if False:
+    #     r = np.load('/media/cat/4TBSSD/yuki/IJ2/tif_files/IJ2pm_Feb5_30Hz/IJ2pm_Feb5_30Hz_code_04_random_ROItimeCourses_30sec_pca_0.95.npy')
+    #     r = r[:,:,:900]
+    #     print ("Random: ", r.shape)
+    #
+    #     #
+    #     t = np.load('/media/cat/4TBSSD/yuki/IJ2/tif_files/IJ2pm_Feb5_30Hz/IJ2pm_Feb5_30Hz_code_04_trial_ROItimeCourses_30sec_pca_0.95.npy')
+    #     t = t[:,:,:900]
+    #     print ("trials: ", t.shape)
+    #
+    #     window_start = 750
+    #     window_len = 30
+    #     X_train = np.vstack((t[:40,:,window_start:window_start+window_len].reshape(40,-1),
+    #                          r[:40,:,window_start:window_start+window_len].reshape(40,-1)))
+    #     print ("X_TRAIN: ", X_train.shape)
+    #     y_train = np.hstack((np.ones(40), np.zeros(40)))
+    #
+    #     X_test = np.vstack((t[40:,:,window_start:window_start+window_len].reshape(12,-1),
+    #                         r[40:,:,window_start:window_start+window_len].reshape(12,-1)))
+    #     y_test = np.hstack((np.ones(12), np.zeros(12)))
+    #     print ("X_TEST: ", X_test.shape)
+    #     print ("y_test:     ", y_test)
 
     # STANDARDIZE DATA
     scaler = StandardScaler()
@@ -554,7 +555,7 @@ class PredictSVMTime():
         self.code = 'code_04'
 
         #
-        self.imaging_rate = 30
+        #self.imaging_rate = 30
 
     def get_sessions(self):
          # load ordered sessions from file
@@ -829,13 +830,13 @@ class PredictSVMTime():
 class PredictSVMChoice():
 
     def __init__(self):
-
+        pass
         #
         #self.min_trials = 0
         #print ("Set min trials to : ", self.min_trials)
 
         #
-        self.imaging_rate = 30
+        #self.imaging_rate = 30
 
     # generate 80% - 20% training - testing datasets
     def generate_training_data(self, trial_courses_fixed, trial_courses_random_fixed):
@@ -1116,128 +1117,7 @@ class PredictSVMChoice():
             self.sessions[k] = str(self.sessions[k]).replace("'b",'').replace("'","")
             if self.sessions[k][0]=='b':
                 self.sessions[k] = self.sessions[k][1:]
-    #
-    # def predict(self):
-    #
-    #     # find specific session if only 1 chosen
-    #     self.get_sessions()
-    #
-    #     #
-    #     prefix1 = ''
-    #     if self.lockout:
-    #         prefix1 = '_lockout_'+str(self.lockout_window)+"sec"
-    #
-    #     #
-    #     prefix2 = ''
-    #     if self.pca_flag:
-    #         prefix2 = '_pca_'+str(self.pca_var)
-    #
-    #
-    #     for s in range(len(self.sessions)):
-    #         # make fname out for animal + session
-    #         fname_out = os.path.join(self.root_dir, self.animal_id,
-    #                              'SVM_Scores',
-    #                              'SVM_Scores_'+
-    #                              self.sessions[s]+'_'+
-    #                              self.code+
-    #                              prefix1+
-    #                              '_trial_ROItimeCourses_'+
-    #                              str(self.window)+'sec'+
-    #                              prefix2+
-    #                              '.npy'
-    #                              )
-    #
-    #         if os.path.exists(fname_out) and self.overwrite==False:
-    #             print ("   already computed, skipping ...")
-    #             continue
-    #
-    #         # grab trial and random data
-    #         fname = os.path.join(self.root_dir, self.animal_id,'tif_files',
-    #                              self.sessions[s],
-    #                              self.sessions[s]+'_'+
-    #                              self.code+
-    #                              prefix1+
-    #                              '_trial_ROItimeCourses_'+
-    #                              str(self.window)+'sec'+
-    #                              prefix2+
-    #                              '.npy'
-    #                              )
-    #         try:
-    #             trial_courses_fixed = np.load(fname)
-    #             trial_courses_random_fixed = np.load(fname.replace('trial','random'))
-    #         except:
-    #             print (" ....file not found, skippping ")
-    #             continue
-    #
-    #         # cross validation; slides through the data and makes as many 80% batches as possible:
-    #         #  E.g. if 65 trials, 80% is 52, so we can get 14 different batches
-    #         # ratio of testing 80% train to 20% test is fixed inside function
-    #         if trial_courses_fixed.shape[0] < self.min_trials:
-    #             print ("    Skipping too few trials less than ", self.min_trials)
-    #             continue
-    #
-    #         #
-    #         print ("processing; ", fname, " with lockout: ", self.lockout)
-    #
-    #         #
-    #         trial_courses_fixed_ids, trial_courses_random_fixed_ids = \
-    #                                             self.generate_training_data_10fold(trial_courses_fixed,
-    #                                                                           trial_courses_random_fixed)
-    #
-    #         # make dir to save SVM data for each time ponit
-    #         root_dir=os.path.split(fname)[0]+'/'
-    #         try:
-    #             os.mkdir(root_dir+'/analysis')
-    #         except:
-    #             pass
-    #
-    #         # exclude small # of trial data
-    #         if trial_courses_fixed.shape[0]<=1:
-    #             print ("  Insuffciient trials, exiting...")
-    #             continue
-    #
-    #         #
-    #         times = np.arange(0,trial_courses_fixed.shape[2])
-    #         if self.parallel:
-    #             res = parmap.map(self.parallel_svm_multiple_tests2,
-    #                              times,
-    #                              self.sliding_window,
-    #                              trial_courses_fixed,
-    #                              trial_courses_fixed_ids, # ids of trial sto be used; make sure
-    #                              trial_courses_random_fixed,
-    #                              trial_courses_random_fixed_ids,
-    #                              self.random_flag,
-    #                              root_dir+'/analysis/',
-    #                              pm_processes=self.n_cores,
-    #                              pm_pbar=True)
-    #         else:
-    #             for k in range(len(times)):
-    #                 self.parallel_svm_multiple_tests2(times[k],
-    #                              self.sliding_window,
-    #                              trial_courses_fixed,
-    #                              trial_courses_fixed_ids, # ids of trial sto be used; make sure
-    #                              trial_courses_random_fixed,
-    #                              trial_courses_random_fixed_ids,
-    #                              self.random_flag,
-    #                              root_dir+'/analysis/')
-    #
-    #         # collect data
-    #         fnames = np.sort(glob2.glob(root_dir+'/analysis/'+"*accuracy.npy"))
-    #
-    #         #
-    #         data_out = np.zeros((len(fnames),10),'float32')
-    #         for ctr,fname in enumerate(fnames):
-    #             data_out[ctr]=np.load(fname)
-    #
-    #         # make SVM_Scores output for animal
-    #         try:
-    #             os.mkdir(os.path.join(self.root_dir, self.animal_id, "SVM_Scores"))
-    #         except:
-    #             pass
-    #
-    #         np.save(fname_out,data_out)
-    #
-    #     print ("DONE predicting SVM on animal: ", self.animal_id)
+
 
     def generate_random_trials(self):
 
@@ -1300,6 +1180,7 @@ class PredictSVMChoice():
         idx = np.where(codes==code)[0]
         locs_selected = locs_44threshold[idx]
 
+        # If no selected times
         if locs_selected.shape[0]==0:
             self.locs_code04 = np.zeros((0),'float32')
             self.locs_code04_lockout = np.zeros((0),'float32')
@@ -1319,9 +1200,24 @@ class PredictSVMChoice():
         if locs_selected[0]>lockout_window:
             locs_selected_with_lockout = np.concatenate(([locs_selected[0]], locs_selected_with_lockout), axis=0)
 
+        # add shift to data if not already computed...
+        if self.add_lever_to_ca_shift:
+            shift_lever_to_ca = get_lever_offset_seconds(root_dir,
+                                                         self.animal_id,
+                                                         recording,
+                                                         self.imaging_rate
+                                                         )
+
+            print ("Lever to [Ca] shift: ", shift_lever_to_ca)
+            print ("locs original: ", locs_selected)
+            locs_selected += shift_lever_to_ca
+            locs_selected_with_lockout += shift_lever_to_ca
+            print ("locs after shift: ", locs_selected)
+
         self.locs_code04 = locs_selected
         self.locs_code04_lockout = locs_selected_with_lockout
 
+    #
     def pre_svm_run(self):
         # load [Ca] data
         self.trials = self.load_ca_whole_stack(self.trial_times)
@@ -1373,23 +1269,24 @@ class PredictSVMChoice():
         if self.pca_flag:
             prefix2 = '_pca'+str(self.nComp)+"Components_"
 
+        #
         for s in range(len(self.sessions)):
             #
             print ("  running: ", self.sessions[s])
 
             #  name of accuracy pickle file to save at the end.
             fname_out = os.path.join(self.root_dir, self.animal_id,'SVM_Scores',
-                                 'SVM_Scores_'+
-                                 self.sessions[s]+
-                                 self.code+
-                                 prefix1+
-                                 prefix2+
-                                 #'_trial_ROItimeCourses_'+
-                                 'window'+str(self.window)+"sec"+
-                                 "_Xvalid"+str(self.xvalidation)+
-                                 "_Slidewindow"+str(self.sliding_window)+"Frames"+
-                                 '_accuracy.pk'
-                                 )
+                                     'SVM_Scores_'+
+                                     self.sessions[s]+
+                                     self.code+
+                                     prefix1+
+                                     prefix2+
+                                     #'_trial_ROItimeCourses_'+
+                                     'window'+str(self.window)+"sec"+
+                                     "_Xvalid"+str(self.xvalidation)+
+                                     "_Slidewindow"+str(self.sliding_window)+"Frames"+
+                                     '_accuracy.npz'
+                                     )
 
             # filename of the PCA denoised whole stack
             self.fname_Ca_time_filters = os.path.join(self.root_dir, self.animal_id,'tif_files',
@@ -1398,8 +1295,7 @@ class PredictSVMChoice():
                                                      str(self.window)+'sec'+
                                                      '_pca'+str(self.all_comps)+'components.npy'
                                                      )
-
-
+            #
             if os.path.exists(self.fname_Ca_time_filters)==False:
                 print ("   [Ca] file missing, skipping ...")
                 continue
@@ -1407,6 +1303,9 @@ class PredictSVMChoice():
             if os.path.exists(fname_out) and self.overwrite==False:
                 print ("   already computed, skipping ...")
                 continue
+            else:
+                print (" ... computing: ", fname_out)
+
 
             # get body initiations from the DLC movement file:
             self.load_trial_times_whole_stack(self.sessions[s])
@@ -1469,10 +1368,15 @@ class PredictSVMChoice():
 
             ################################################
             #
-            with open(fname_out, 'wb') as fout:
-                fout.write(pickle.dumps(self.accuracy_array))
-            with open(fname_out.replace('accuracy','predictions'), 'wb') as fout:
-                fout.write(pickle.dumps(self.prediction_array))
+
+            np.savez(fname_out,
+                     accuracy = self.accuracy_array,
+                     predictions = self.prediction_array,
+                     names = self.all_labels)
+            # with open(fname_out, 'wb') as fout:
+            #     fout.write(pickle.dumps(self.accuracy_array))
+            # with open(fname_out.replace('accuracy','predictions'), 'wb') as fout:
+            #     fout.write(pickle.dumps(self.prediction_array))
 
         print ("DONE predicting SVM on animal: ", self.animal_id)
 
@@ -1493,11 +1397,12 @@ class PredictSVMChoice():
             #
             for k in range(7):
                 self.feature_quiescent.append([])
-            return
-        #
-        data = np.load(fname, allow_pickle=True)
-        self.feature_quiescent = data['feature_quiescent']
-        self.all_quiescent = data['all_quiescent']
+
+        else:
+            #
+            data = np.load(fname, allow_pickle=True)
+            self.feature_quiescent = data['feature_quiescent']
+            self.all_quiescent = data['all_quiescent']
 
     def predict2(self):
         ''' Predict2 is an updated version which uses sklearn tools for svm instead of
@@ -1529,7 +1434,7 @@ class PredictSVMChoice():
         #
         prefix3 = self.correlation_prefix
 
-
+        #
         for s in range(len(self.sessions)):
 
             if self.ideal_window_flag:
@@ -2382,7 +2287,8 @@ def run_svm_single_randomized_kFold(run_id,
                                    trials,
                                    random,
                                    sliding_window,
-                                   method):
+                                   method,
+                                   gpu_flag):
 
     # train data excludes the run_id
     idx_trials = np.delete(np.arange(trials.shape[0]),
@@ -2408,7 +2314,7 @@ def run_svm_single_randomized_kFold(run_id,
     accuracy2=[]
     labels2 = []
     pred2 = []
-    for k in range(0, trials.shape[2]-sliding_window, 1):
+    for k in trange(0, trials.shape[2]-sliding_window, 1):
         X = train#[:,:,:window]
         X = X[:,:,k:k+sliding_window]# .transpose(0,2,1)
         X = X.reshape(X.shape[0],-1)
@@ -2417,7 +2323,7 @@ def run_svm_single_randomized_kFold(run_id,
         X_test = test[:,:,k:k+sliding_window]
         X_test = X_test.reshape(X_test.shape[0],-1)
 
-        # scale within each batch
+        # scale both control and trials within each SVM batch
         if True:
             X_all=np.concatenate((X,X_test),axis=0)
             #X_all_scaled = sklearn.preprocessing.scale(X_all)
@@ -2426,9 +2332,16 @@ def run_svm_single_randomized_kFold(run_id,
             X_test = X_all_normalized[X.shape[0]:]
 
         #########################################
-        clf = svm.SVC(kernel=method)
-        # y = labels_train
-        clf.fit(X, labels_train)
+        #
+        if gpu_flag:
+            from thundersvm import SVC
+            clf = SVC(kernel=method)
+            clf.fit(X, labels_train)
+
+        else:
+            clf = svm.SVC(kernel=method)
+            # y = labels_train
+            clf.fit(X, labels_train)
 
         #
         # # this is too late to scale
@@ -2450,80 +2363,6 @@ def run_svm_single_randomized_kFold(run_id,
 
     # print ("inner loop: accraucy: ", accuracy2.shape, labels2.shape, pred2.shape)
     return accuracy2, labels2, pred2
-
-# #
-#
-# def run_svm_single_randomized_kFold(run_id,
-#                                    idx_trials_split,
-#                                    idx_random_split,
-#                                    trials,
-#                                    random,
-#                                    sliding_window,
-#                                    method):
-#
-#     # train data excludes the run_id
-#     idx_trials = np.delete(np.arange(trials.shape[0]),
-#                                idx_trials_split[run_id])
-#     idx_random = np.delete(np.arange(random.shape[0]),
-#                                idx_random_split[run_id])
-#
-#     # test data is the left over labels
-#     idx_trials_not = np.delete(np.arange(trials.shape[0]),idx_trials)
-#     idx_random_not = np.delete(np.arange(random.shape[0]),idx_random)
-#
-#     # stack train data
-#     train = np.vstack((trials[idx_trials],random[idx_random]))
-#     labels_train = np.hstack((np.ones(trials[idx_trials].shape[0]),
-#                               np.zeros(random[idx_random].shape[0])))
-#
-#     # stack test data
-#     test = np.vstack((trials[idx_trials_not], random[idx_random_not]))
-#     labels_test = np.hstack((np.ones(trials[idx_trials_not].shape[0]),
-#                              np.zeros(random[idx_random_not].shape[0])))
-#
-#     #
-#     accuracy2=[]
-#     labels2 = []
-#     pred2 = []
-#     for k in range(0, trials.shape[2]-sliding_window, 1):
-#         X = train#[:,:,:window]
-#         X = X[:,:,k:k+sliding_window]
-#         #if mean_filter:
-#         #    X = np.mean(X,2)
-#
-#         X = X.reshape(train.shape[0],-1)
-#
-#         #
-#         y = labels_train
-#
-#         # normalization
-#         X = sklearn.preprocessing.scale(X)
-#
-#         #
-#         clf = svm.SVC(kernel=method)
-#         clf.fit(X, y)
-#
-#
-#         # test
-#         X_test = test[:,:,k:k+sliding_window]
-#
-#         X_test = X_test.reshape(X_test.shape[0],-1)
-#         X_test = sklearn.preprocessing.scale(X_test)
-#         #
-#         y_pred = clf.predict(X_test)
-#
-#         #
-#         acc = accuracy_score(labels_test, y_pred)
-#         accuracy2.append(acc)
-#         labels2.append(labels_test)
-#         pred2.append(y_pred)
-#
-#     accuracy2 = np.array(accuracy2)
-#     labels2 = np.array(labels2)
-#     pred2 = np.array(pred2)
-#
-#     #print ("inner loop: accraucy: ", accuracy2.shape, labels2.shape, pred2.shape)
-#     return accuracy2, labels2, pred2
 
 
 def get_sessions(main_dir,
@@ -2772,3 +2611,96 @@ def generate_random_trials(trial_times,
 
     #
     return random_times
+
+
+class PredictSVMChoiceSuperSession():
+
+    #
+    def __init__(self):
+        pass
+        #
+
+
+
+    def predict3(self, trials, random, features):
+        ''' Predict2 is an updated version which uses sklearn tools for svm instead of
+        coding from scratch
+        '''
+
+        #
+        fname_out = '/home/cat/'+self.animal_id+"_"+str(features)+'_super_res.npz'
+
+        #
+        if os.path.exists(fname_out)==False:
+            self.trials = trials
+            self.random = random
+            accuracy, labels, predictions = self.compute_accuracy_svm_KFold()
+
+            #
+            np.savez(fname_out,
+                    accuracy = accuracy,
+                    labels = labels,
+                    predictions = predictions)
+
+
+    #
+    def compute_accuracy_svm_KFold(self):
+
+        # randomize seed
+        np.random.seed()
+
+
+        # select groups for parallel processing
+        run_ids = np.arange(self.xvalidation)
+
+        idx_trials_split = np.array_split(np.random.choice(np.arange(self.trials.shape[0]),
+                                                                     self.trials.shape[0],
+                                                                     replace=False),
+                                          self.xvalidation)
+
+        idx_random_split = np.array_split(np.random.choice(np.arange(self.random.shape[0]),
+                                                                     self.random.shape[0],
+                                                                     replace=False),
+                                          self.xvalidation)
+
+        if self.parallel:
+            data = parmap.map(run_svm_single_randomized_kFold,
+                               run_ids,
+                               idx_trials_split,
+                               idx_random_split,
+                               self.trials,
+                               self.random,
+                               self.sliding_window,
+                               self.method,
+                               self.gpu_flag,
+                               pm_processes = self.n_cores,
+                               pm_pbar=True)
+        else:
+            data = []
+            for k in range(run_ids.shape[0]):
+                #print ("self.trials.shape: ", self.trials.shape)
+                data.append(run_svm_single_randomized_kFold(
+                                                           run_ids[k],
+                                                           idx_trials_split,
+                                                           idx_random_split,
+                                                           self.trials,
+                                                           self.random,
+                                                           self.sliding_window,
+                                                           self.method,
+                                                           self.gpu_flag)
+                            )
+
+        #
+        accuracy = []
+        labels = []
+        predictions = []
+        for k in range(len(data)):
+            accuracy.append(data[k][0].T)
+            labels.append(data[k][1].T)
+            predictions.append(data[k][2].T)
+
+        accuracy = np.vstack(accuracy).T
+        labels = np.vstack(labels).T
+        predictions = np.vstack(predictions).T
+
+        return accuracy, labels, predictions

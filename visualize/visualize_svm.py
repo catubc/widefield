@@ -64,7 +64,7 @@ class Visualize():
         self.cbar_offset = 0
 
         #
-        self.imaging_rate = 30.
+        #self.imaging_rate = 30.
 
 
     def load_data(self, fname):
@@ -199,8 +199,7 @@ class Visualize():
 
         self.session_corrected = session_corrected
 
-
-
+    #
     def get_number_of_trials(self):
 
         ''' There are 4 types of trials so must load them individually
@@ -210,8 +209,14 @@ class Visualize():
         main_dir = os.path.join(self.main_dir,
                                 self.animal_id,
                                 'tif_files')
-        session_corrected = os.path.split(
+
+        try:
+            session_corrected = os.path.split(
                             glob2.glob(main_dir+"/*"+self.session_id+"*")[0])[1]
+        except:
+
+            self.n_trials = 0
+            return
 
         self.session_corrected = session_corrected
         #
@@ -424,9 +429,13 @@ class Visualize():
             try:
                 data = np.load(self.fname, allow_pickle=True)
             except:
-                print( " ... data missing npy", self.fname)
-                self.data = np.zeros((0))
-                return
+                try:
+                    self.fname = self.fname.replace("Scores_","Scores_ROI_")
+                    data = np.load(self.fname, allow_pickle=True)
+                except:
+                    print( " ... data missing npy 2", self.fname)
+                    self.data = np.zeros((0))
+                    return
             self.data = data['accuracy']
 
         # else load specific code data from file
@@ -538,9 +547,9 @@ class Visualize():
 
         #
         if self.n_trials<self.min_trials:
-            print ("Insufficient trials...", self.n_trials)
-            self.data = np.zeros((0))
-            return
+            print ("*************: very few trials...", self.n_trials)
+            #self.data = np.zeros((0))
+            #return
 
         #################################################
         ######### COMPUTE MEAN AND STD ##################
@@ -562,22 +571,20 @@ class Visualize():
 
         #
         self.mean = mean
-        print (self.mean.shape)
 
         #
         self.std = np.std(self.data, axis=1)
 
-
         # clip the data to the required values
-        self.data = self.data[(self.xlim[0]+self.window)*30:
-                              (self.xlim[1]+self.window)*30]
+        self.data = self.data[(self.xlim[0]+self.window)*self.imaging_rate:
+                              (self.xlim[1]+self.window)*self.imaging_rate]
 
-        self.mean = self.mean[(self.xlim[0]+self.window)*30:
-                              (self.xlim[1]+self.window)*30]
-        print ("self mean: ", self.mean.shape)
+        self.mean = self.mean[(self.xlim[0]+self.window)*self.imaging_rate:
+                              (self.xlim[1]+self.window)*self.imaging_rate]
+        #print ("self mean: ", self.mean.shape)
 
-        self.std = self.std[(self.xlim[0]+self.window)*30:
-                              (self.xlim[1]+self.window)*30]
+        self.std = self.std[(self.xlim[0]+self.window)*self.imaging_rate:
+                              (self.xlim[1]+self.window)*self.imaging_rate]
 
 
     def process_session_concatenated(self):
@@ -609,14 +616,15 @@ class Visualize():
         fname_n_trials = self.fname[:-4]+'_n_trials.npy'
         self.n_trials = np.load(fname_n_trials)
 
-        # gets the corect filename to be loaded below
-        self.get_fname()
+        if False:
+            # gets the corect filename to be loaded below
+            self.get_fname()
 
-        #
-        if os.path.exists(self.fname)==False:
-            print ("missing: ", self.fname)
-            self.data = np.zeros((0))
-            return
+            #
+            if os.path.exists(self.fname)==False:
+                print ("missing: ", self.fname)
+                self.data = np.zeros((0))
+                return
 
         #
         mean = self.data.mean(1)
@@ -788,8 +796,9 @@ class Visualize():
 
             # Exclude one of the weird datapoint from the AQ2? session
             if temp>0:
-                #print ("n trials: ", self.n_trials, a,
-                #       p, temp, self.session_id, self.sig.shape)
+                print ("n trials: ", self.n_trials, a,
+                       p, temp, self.session_id, self.sig.shape)
+                print ('SKIPPING')
                 continue
 
             #
@@ -817,6 +826,7 @@ class Visualize():
             n_trials.append(self.n_trials)
             n_good_sessions+=1
             print (" ... finished session...edt: ", self.edt)
+            print ('')
             print ('')
 
 
@@ -982,10 +992,13 @@ class Visualize():
                 #
                 self.fname = self.fnames_svm[p]
 
+                #
                 self.process_session_concatenated()
-                # print ("a: ", a, self.session_id, self.data.shape)
+
                 #
                 if self.data.shape[0] == 0:
+                    print ("skipping, no data")
+                    print ('')
                     continue
 
                 # compute significance
@@ -1007,8 +1020,7 @@ class Visualize():
 
                 # Exclude one of the weird datapoint from the AQ2? session
                 if temp>0:
-                    #print ("n trials: ", self.n_trials, a,
-                    #       p, temp, self.session_id, self.sig.shape)
+                    print ("skipping weird datapoint...")
                     continue
 
                 #
@@ -1737,6 +1749,10 @@ class Visualize():
         self.ideal_sliding_windows = []
         for k in range(len(self.sessions)):
             self.session = os.path.split(self.sessions[k])[1][:-4]
+            try:
+                self.session = str(self.session,'utf-8')
+            except:
+                pass
 
             if self.concatenated_flag==True:
                 fname = os.path.join(self.main_dir, self.animal_id,
@@ -1752,7 +1768,9 @@ class Visualize():
                 fname = os.path.join(self.main_dir, self.animal_id,
                                      'SVM_Scores/SVM_Scores_'+prefix3+
                                      self.session+
-                                     self.code+prefix1+'_trial_ROItimeCourses_30sec_Xvalid10_Slidewindow30.npz')
+                                     self.code+prefix1+'_trial_ROItimeCourses_'+
+                                     str(self.window)+'sec_Xvalid10_Slidewindow'+
+                                     str(int(self.sliding_window))+'.npz')
 
                 #
                 # data is in the main tif-file session directory
@@ -1761,7 +1779,9 @@ class Visualize():
                     fname = os.path.join(self.main_dir, self.animal_id,'tif_files',
                                          self.session,
                                          self.session + "_"+
-                                         self.code+prefix1+'_trial_ROItimeCourses_30sec_Xvalid10_Slidewindow30.npz')
+                                         self.code+prefix1+'_trial_ROItimeCourses_'+
+                                         str(self.window)+'sec_Xvalid10_Slidewindow'+
+                                         str(int(self.sliding_window))+'.npz')
                 self.ideal_sliding_windows.append(self.sliding_window)
 
             elif self.ideal_window_flag==True:
