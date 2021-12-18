@@ -818,13 +818,13 @@ class ProcessCalcium():
                                       n_sec_window,
                                       fname_04,
                                       fname_random,
-                                      # recompute,
-                                      # midline_filter_flag,
-                                      # save_stm_flag,
-                                      # transform_data_flag,
-                                      # use_fixed_filter_flag,
-                                      # fname_filter,
-                                      # pca_denoise_flag
+                                      recompute,
+                                      midline_filter_flag,
+                                      save_stm_flag,
+                                      transform_data_flag,
+                                      use_fixed_filter_flag,
+                                      fname_filter,
+                                      pca_denoise_flag
                                       ):
 
         if self.whole_stack:

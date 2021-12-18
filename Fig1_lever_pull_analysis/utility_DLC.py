@@ -1517,7 +1517,9 @@ def plot_number_04_all_mice_all_sessions_single_plot(main_dir,
                     c='grey',
                     alpha=.85)
         #
-        corr = np.corrcoef(x, y)[0,1]
+        #corr = np.corrcoef(x, y)[0,1]
+        corr = scipy.stats.pearsonr(x,y)
+
         print (ctr, " cor: ", corr)
 
         coef = np.polyfit(x,y,1)
@@ -1527,7 +1529,7 @@ def plot_number_04_all_mice_all_sessions_single_plot(main_dir,
         Y = poly1d_fn(x)
         plt.plot(x, Y, linewidth=5,
                  c='black',
-                 label= "M"+str(ctr+1)+" " +str(round(corr,2)))
+                 label= "M"+str(ctr+1)+" " +str(np.round(corr,2)))
 
         plt.xlim(x[0],x[-1])
         plt.xticks([])
@@ -1740,6 +1742,8 @@ def compute_single_mouse_all_sessions_number_of_04_02_trials(root_dir):
         abs_dates=[]
         n_04=[]
         n_02=[]
+        reward_starts = []
+        nonreward_starts = []
         for tif_file in tif_files:
             text = tif_root+ '/'+tif_file+'/*abstimes.npy'
 
@@ -1776,6 +1780,9 @@ def compute_single_mouse_all_sessions_number_of_04_02_trials(root_dir):
                 # find where 04 - rewarded pulls start;
             (starts_04, starts_04_idx,starts_02, starts_02_idx) = find_code04_starts2(abscodes, abstimes, abspositions)
 
+            reward_starts.append(starts_04)
+            nonreward_starts.append(starts_02)
+
             abs_dates.append(month*31+day)
             n_04.append(starts_04.shape[0])
             n_02.append(starts_02.shape[0])
@@ -1783,12 +1790,16 @@ def compute_single_mouse_all_sessions_number_of_04_02_trials(root_dir):
         abs_dates=np.array(abs_dates)
         n_04=np.array(n_04)
         n_02=np.array(n_02)
+        reward_starts=np.array(reward_starts)
+        nonreward_starts=np.array(nonreward_starts)
 
         idx = np.argsort(abs_dates)
         abs_dates = abs_dates[idx]
         abs_dates=abs_dates-abs_dates[0]
         n_04=n_04[idx]
         n_02=n_02[idx]
+        reward_starts=reward_starts[idx]
+        nonreward_starts=nonreward_starts[idx]
 
         #ax=plt.subplot(3,4,ctr_animal+1)
 
@@ -1806,7 +1817,11 @@ def compute_single_mouse_all_sessions_number_of_04_02_trials(root_dir):
                 n_04=n_04,
                 n_02=n_02,
                 n_04_smooth=n_04_smooth,
-                n_02_smooth=n_02_smooth)
+                n_02_smooth=n_02_smooth,
+                reward_starts=reward_starts,
+                nonreward_starts=nonreward_starts
+
+                 )
 
 def find_code04_starts2(abscodes, abstimes, abspositions, lockout=3.0):
     vals = []

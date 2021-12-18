@@ -64,7 +64,7 @@ class Visualize():
         self.cbar_offset = 0
 
         #
-        self.imaging_rate = 30.
+        #self.imaging_rate = 30.
 
 
     def load_data(self, fname):
@@ -187,7 +187,7 @@ class Visualize():
                      "_Slidewindow"+str(self.sliding_window)+"Frames"+
                      '_accuracy.pk'
                      )
-        print ("SET FNAME: ", fname)
+        #print ("SET FNAME: ", fname)
         self.fname = fname
 
         # convert wild card file name into correct filename for animal
@@ -199,8 +199,7 @@ class Visualize():
 
         self.session_corrected = session_corrected
 
-
-
+    #
     def get_number_of_trials(self):
 
         ''' There are 4 types of trials so must load them individually
@@ -210,12 +209,18 @@ class Visualize():
         main_dir = os.path.join(self.main_dir,
                                 self.animal_id,
                                 'tif_files')
-        session_corrected = os.path.split(
+
+        try:
+            session_corrected = os.path.split(
                             glob2.glob(main_dir+"/*"+self.session_id+"*")[0])[1]
+        except:
+
+            self.n_trials = 0
+            return
 
         self.session_corrected = session_corrected
         #
-        if self.code == 'code_04':
+        if self.code == 'code_04' or self.compute_roi:
 
             # check to see if session done
             fname_txt = os.path.join(self.main_dir,
@@ -424,9 +429,13 @@ class Visualize():
             try:
                 data = np.load(self.fname, allow_pickle=True)
             except:
-                print( " ... data missing npy", self.fname)
-                self.data = np.zeros((0))
-                return
+                try:
+                    self.fname = self.fname.replace("Scores_","Scores_ROI_")
+                    data = np.load(self.fname, allow_pickle=True)
+                except:
+                    print( " ... data missing npy 2", self.fname)
+                    self.data = np.zeros((0))
+                    return
             self.data = data['accuracy']
 
         # else load specific code data from file
@@ -458,6 +467,19 @@ class Visualize():
         print ("DATA; ", self.data.shape)
 
         #################################################
+        ### PAD DATA WITH  SVM SLDING WINDOW ############
+        #################################################
+
+        if self.ideal_window_flag:
+            print ("self.sig_sav: ", self.sig_save.shape)
+            print ("original len data: ", self.data.shape)
+            print ('self.sliding_window: ', self.sliding_window)
+
+            pad = np.zeros((self.sliding_window, self.data.shape[1]), dtype=np.float32)
+            self.data = np.vstack((pad, self.data))
+            print (" padded  data: ", self.data.shape)
+
+        #################################################
         ### LOAD SHIFTS BETWEEN LEVER AND CALCIUM #######
         #################################################
         if self.dlc_offset_flag:
@@ -477,7 +499,7 @@ class Visualize():
             try:
                 data = np.load(fname_correlate,allow_pickle=True)
             except:
-                print( " ... data missing", self.fname)
+                print( " ... data missing correlate.npz", self.fname)
                 self.data = np.zeros((0))
                 return
 
@@ -503,7 +525,7 @@ class Visualize():
             print ("SHIFT Loaded: ", self.shift)
 
         #
-        if 'code_04' not in self.code:
+        if 'code_04' not in self.code and self.compute_roi==False:
             print ("... DLC shift applied for body movement: ", self.shift)
             self.data = np.roll(self.data,int(self.shift*self.imaging_rate),axis=0)
         else:
@@ -523,12 +545,16 @@ class Visualize():
         print (" post trials data size ", self.data.shape)
         print ("      n-trials: ", self.n_trials)
 
-
         #
         if self.n_trials<self.min_trials:
-            print ("Insufficient trials...", self.n_trials)
-            self.data = np.zeros((0))
-            return
+            print ("*************: very few trials...", self.n_trials)
+            #self.data = np.zeros((0))
+            #return
+
+        #################################################
+        ######### COMPUTE MEAN AND STD ##################
+        #################################################
+
 
         #
         mean = self.data.mean(1)
@@ -545,22 +571,20 @@ class Visualize():
 
         #
         self.mean = mean
-        print (self.mean.shape)
 
         #
         self.std = np.std(self.data, axis=1)
 
-
         # clip the data to the required values
-        self.data = self.data[(self.xlim[0]+self.window)*30:
-                              (self.xlim[1]+self.window)*30]
+        self.data = self.data[(self.xlim[0]+self.window)*self.imaging_rate:
+                              (self.xlim[1]+self.window)*self.imaging_rate]
 
-        self.mean = self.mean[(self.xlim[0]+self.window)*30:
-                              (self.xlim[1]+self.window)*30]
-        print ("self mean: ", self.mean.shape)
+        self.mean = self.mean[(self.xlim[0]+self.window)*self.imaging_rate:
+                              (self.xlim[1]+self.window)*self.imaging_rate]
+        #print ("self mean: ", self.mean.shape)
 
-        self.std = self.std[(self.xlim[0]+self.window)*30:
-                              (self.xlim[1]+self.window)*30]
+        self.std = self.std[(self.xlim[0]+self.window)*self.imaging_rate:
+                              (self.xlim[1]+self.window)*self.imaging_rate]
 
 
     def process_session_concatenated(self):
@@ -576,31 +600,31 @@ class Visualize():
         self.data = data['accuracy']
 
         # grab only first half:
-        print ("LOADED: DATA" , self.data.shape)
+        #print ("LOADED: DATA" , self.data.shape)
 
-        # get n trials for both lockout and all trials data
-        if False:
-            self.get_number_of_trials()
-            #print (" post trials data size ", self.data.shape)
-
-            #
-            if self.n_trials<self.min_trials:
-                print ("Insufficient trials...", self.n_trials)
-                self.data = np.zeros((0))
-                return
+        # # get n trials for both lockout and all trials data
+        # if False:
+        #     self.get_number_of_trials()
+        #     #print (" post trials data size ", self.data.shape)
+        #
+        #     #
+        #     if self.n_trials<self.min_trials:
+        #         print ("Insufficient trials...", self.n_trials)
+        #         self.data = np.zeros((0))
+        #         return
 
         fname_n_trials = self.fname[:-4]+'_n_trials.npy'
         self.n_trials = np.load(fname_n_trials)
 
-        # gets the corect filename to be loaded below
-        self.get_fname()
-        #print (" post fname: ", self.data.shape)
+        if False:
+            # gets the corect filename to be loaded below
+            self.get_fname()
 
-        #
-        if os.path.exists(self.fname)==False:
-            print ("missing: ", self.fname)
-            self.data = np.zeros((0))
-            return
+            #
+            if os.path.exists(self.fname)==False:
+                print ("missing: ", self.fname)
+                self.data = np.zeros((0))
+                return
 
         #
         mean = self.data.mean(1)
@@ -650,7 +674,7 @@ class Visualize():
 
     def compute_significance(self):
 
-        print ("self.data: ", self.data.shape)
+        #print ("self.data: ", self.data.shape)
 
         #
         sig = []
@@ -666,11 +690,12 @@ class Visualize():
 
 
         self.sig_save = np.array(sig).copy()
-        print ("Self sig save: ", self.sig_save.shape)
+        #print ("Self sig save: ", self.sig_save.shape)
+
 
         # multiple hypothesis test Benjamini-Hockberg
         temp = np.array(sig)
-        print ("data into multi-hypothesis tes:", temp.shape)
+        #print ("data into multi-hypothesis tes:", temp.shape)
         temp2 = multipletests(temp, alpha=self.significance, method='fdr_bh')
         sig = temp2[1]
 
@@ -688,7 +713,7 @@ class Visualize():
 
         # save it
         self.sig = sig
-        print ("Final sig: ", self.sig.shape)
+        #print ("Final sig: ", self.sig.shape)
 
         # find earliest significant;
         earliest_continuous = 0
@@ -703,290 +728,408 @@ class Visualize():
                 break
 
         #
-        print ("earliest: ", earliest_continuous,
-               " in sec: ", -(self.sig.shape[1]-earliest_continuous)/30.)
+        #print ("earliest: ", earliest_continuous,
+        #       " in sec: ", -(self.sig.shape[1]-earliest_continuous)/30.)
 
         self.earliest_continuous = -(self.sig.shape[1]-earliest_continuous)/30.
 
-        self.edt = -(self.sig.shape[1]-earliest_continuous)/30.
+        self.edt = self.earliest_continuous
 
-        print (" signianc n-trials: ", self.n_trials)
+        #print (" signianc n-trials: ", self.n_trials)
 
-    def compute_first_decoding_time(self, lockouts=[False, True]):
+
+    #
+    def compute_first_decoding_time_ROI(self):
+
+        #
+        fname_out = os.path.join(self.main_dir, self.animal_id,
+                         'first_decoding_time_'+self.code+'.npz')
+
+        if self.ideal_window_flag==True:
+            fname_out = fname_out.replace('.npz','_ideal_window.npz')
+
+        if os.path.exists(fname_out) and self.overwrite==False:
+            return
+
+        #
+        res_continuous = []
+        res_earliest = []
+        session_nos = []
+        session_names = []
+        n_trials = []
+        sigs = []
+
+        #
+        self.get_sessions()
+        print ("SESSIONS: ", self.session_ids)
+        #
+        n_good_sessions = 0
+        for p in range(len(self.session_ids)):
+            self.session_id = self.session_ids[p]
+
+            #
+            self.fname = self.fnames_svm[p]
+            print ("self.fname: ", self.fname)
+
+            self.process_session()
+            # print ("a: ", a, self.session_id, self.data.shape)
+            #
+            if self.data.shape[0] == 0:
+                continue
+
+            # compute significance
+            self.compute_significance()
+
+            # save all the significant vals;
+            sigs.append(self.sig_save)
+
+            #
+            self.sig = self.sig.squeeze()
+
+            # find earliest period of significance, going back in time;
+            for k in range(self.sig.shape[0]-1,0,-1):
+                if np.isnan(self.sig[k])==True:
+                    break
+
+            #
+            temp = -self.window+k/self.imaging_rate
+
+            # Exclude one of the weird datapoint from the AQ2? session
+            if temp>0:
+                print ("n trials: ", self.n_trials, a,
+                       p, temp, self.session_id, self.sig.shape)
+                print ('SKIPPING')
+                continue
+
+            #
+            res_continuous.append(self.edt)
+
+            ########################################
+            ########################################
+            # find aboslute earliest
+            k_earliest = self.sig.shape[0]
+            for k in range(self.sig.shape[0]-1,0,-1):
+                if np.isnan(self.sig[k])==True:
+                    k_earliest = k
+
+            earliest_temp = -self.window+k_earliest/self.imaging_rate
+            res_earliest.append(earliest_temp)
+
+            ########################################
+            ########################################
+            session_nos.append(p)
+
+            #
+            session_names.append(self.session_id)
+
+            #
+            n_trials.append(self.n_trials)
+            n_good_sessions+=1
+            print (" ... finished session...edt: ", self.edt)
+            print ('')
+            print ('')
+
+
+        #
+        print (" # OF GOOD SESSIONS: ", n_good_sessions)
+        np.savez(fname_out,
+                 all_res_continuous = res_continuous,
+                 all_res_earliest = res_earliest,
+                 all_session_nos = session_nos,
+                 all_session_names = session_names,
+                 all_n_trials = n_trials,
+                 all_sigs = sigs
+                 )
+        print ('')
+        print ('')
+        print ('')
+        print ('')
+        print ('')
+
+
+
+    def compute_first_decoding_time(self, lockouts):
 
         #
         #if lockouts = [False, True]
         for lockout in lockouts:
             self.lockout=lockout
 
-            all_res_continuous = []
-            all_res_earliest = []
-            all_session_nos = []
-            all_session_names = []
-            all_n_trials = []
-            all_sigs = []
+            #
+            if self.lockout==True:
+                fname_out = os.path.join(self.main_dir, self.animal_id,
+                             'first_decoding_time_lockout.npz')
+            else:
+                fname_out = os.path.join(self.main_dir, self.animal_id,
+                             'first_decoding_time.npz')
+
+            if self.ideal_window_flag==True:
+                fname_out = fname_out.replace('.npz','_ideal_window.npz')
+
+            res_continuous = []
+            res_earliest = []
+            session_nos = []
+            session_names = []
+            n_trials = []
+            sigs = []
 
             #
-            for a in trange(len(self.animal_ids)):
-                res_continuous = []
-                res_earliest = []
-                session_nos = []
-                session_names = []
-                n_trials = []
-                sigs = []
+            self.get_sessions()
+            print ("SESSIONS: ", self.session_ids)
+            #
+            n_good_sessions = 0
+            for p in range(len(self.session_ids)):
+            #for p in range(len(self.fnames_svm)):
+                self.session_id = self.session_ids[p]
 
                 #
-                self.animal_id = self.animal_ids[a]
+                self.fname = self.fnames_svm[p]
+                print ("self.fname: ", self.fname)
+                self.sliding_window = self.ideal_sliding_windows[p]
 
                 #
-                self.get_sessions()
-                print ("SESSIONS: ", self.session_ids)
+                self.process_session()
+
                 #
-                for p in range(len(self.session_ids)):
-                    self.session_id = self.session_ids[p]
+                if self.data.shape[0] == 0:
+                    continue
 
-                    #
-                    self.fname = self.fnames_svm[p]
-                    print ("self.fname: ", self.fname)
+                # compute significance
+                self.compute_significance()
 
-                    self.process_session()
-                    # print ("a: ", a, self.session_id, self.data.shape)
-                    #
-                    if self.data.shape[0] == 0:
-                        continue
+                # save all the significant vals;
+                sigs.append(self.sig_save)
 
-                    # compute significance
-                    self.compute_significance()
+                #
+                self.sig = self.sig.squeeze()
 
-                    # save all the significant vals;
-                    sigs.append(self.sig_save)
+                # find earliest period of significance, going back in time;
+                for k in range(self.sig.shape[0]-1,0,-1):
+                    if np.isnan(self.sig[k])==True:
+                        break
 
-                    #
-                    self.sig = self.sig.squeeze()
+                #
+                temp = -self.window+k/self.imaging_rate
 
-                    # find earliest period of significance, going back in time;
-                    for k in range(self.sig.shape[0]-1,0,-1):
-                        if np.isnan(self.sig[k])==True:
-                            break
+                # Exclude one of the weird datapoint from the AQ2? session
+                if temp>0:
+                    #print ("n trials: ", self.n_trials, a,
+                    #       p, temp, self.session_id, self.sig.shape)
+                    continue
 
-                    #
-                    temp = -self.window+k/self.imaging_rate
+                #
+                res_continuous.append(temp)
 
-                    # Exclude one of the weird datapoint from the AQ2? session
-                    if temp>0:
-                        #print ("n trials: ", self.n_trials, a,
-                        #       p, temp, self.session_id, self.sig.shape)
-                        continue
+                # find aboslute earliest
+                k_earliest = self.sig.shape[0]
+                for k in range(self.sig.shape[0]-1,0,-1):
+                    if np.isnan(self.sig[k])==True:
+                        k_earliest = k
+                res_earliest.append(-self.window+k_earliest/self.imaging_rate)
 
-                    #
-                    res_continuous.append(temp)
+                #
+                session_nos.append(p)
 
-                    # find aboslute earliest
-                    k_earliest = self.sig.shape[0]
-                    for k in range(self.sig.shape[0]-1,0,-1):
-                        if np.isnan(self.sig[k])==True:
-                            k_earliest = k
-                    res_earliest.append(-self.window+k_earliest/self.imaging_rate)
+                #
+                session_names.append(self.session_id)
 
-                    #
-                    session_nos.append(p)
-
-                    #
-                    session_names.append(self.session_id)
-
-                    #
-                    n_trials.append(self.n_trials)
-
-                    print ("... finished session ...")
-                    print ("")
+                #
+                n_trials.append(self.n_trials)
+                n_good_sessions+=1
+                print (" ... finished session...")
+                print ('')
 
 
-                # save data
-                all_res_continuous.append(res_continuous)
-                all_res_earliest.append(res_earliest)
-                all_session_nos.append(session_nos)
-                all_session_names.append(session_names)
-                all_n_trials.append(n_trials)
-                all_sigs.append(sigs)
+            #
+            print (" # OF GOOD SESSIONS: ", n_good_sessions)
+            np.savez(fname_out,
+                     all_res_continuous = res_continuous,
+                     all_res_earliest = res_earliest,
+                     all_session_nos = session_nos,
+                     all_session_names = session_names,
+                     all_n_trials = n_trials,
+                     all_sigs = sigs
+                     )
+            print ('')
+            print ('')
+            print ('')
+            print ('')
+            print ('')
 
-            if lockout==False:
-                np.savez(self.main_dir+'/first_decoding_time'+
-                         "_minTrials"+str(self.min_trials)+
-                         '_all_'+
-                         str(self.window)+'sec.npz',
-                         all_res_continuous = all_res_continuous,
-                         all_res_earliest = all_res_earliest,
-                         all_session_nos = all_session_nos,
-                         all_session_names = all_session_names,
-                         all_n_trials = all_n_trials,
-                         all_sigs = all_sigs
-                         )
-            else:
-                np.savez(self.main_dir+'/first_decoding_time'+
-                         "_minTrials"+str(self.min_trials)+
-                         '_lockout_'+
-                         str(self.window)+'sec.npz',
-                         all_res_continuous = all_res_continuous,
-                         all_res_earliest = all_res_earliest,
-                         all_session_nos = all_session_nos,
-                         all_session_names = all_session_names,
-                         all_n_trials = all_n_trials,
-                         all_sigs = all_sigs
-                         )
-        print ("")
-        print ("")
-        print ("")
-        print ("")
-        print ("")
 
-    def compute_first_decoding_time_concatenated(self, lockouts=[False, True]):
+    def compute_first_decoding_time_concatenated(self, lockouts):
 
         #
         #if lockouts = [False, True]
         for lockout in lockouts:
             self.lockout=lockout
 
-            all_res_continuous = []
-            all_res_earliest = []
-            all_session_nos = []
-            all_session_names = []
-            all_n_trials = []
-            all_sigs = []
+            #
+
+            if self.lockout==True:
+                fname_out = os.path.join(self.main_dir, self.animal_id,
+                             'first_decoding_time_concatenated_lockout.npz')
+            else:
+                fname_out = os.path.join(self.main_dir, self.animal_id,
+                             'first_decoding_time_concatenated.npz')
 
             #
-            for a in trange(len(self.animal_ids)):
-                res_continuous = []
-                res_earliest = []
-                session_nos = []
-                session_names = []
-                n_trials = []
-                sigs = []
+            res_continuous = []
+            res_earliest = []
+            session_nos = []
+            session_names = []
+            n_trials = []
+            sigs = []
+
+            #
+            self.get_sessions()
+
+            #
+            for p in range(len(self.session_ids)):
+                self.session_id = self.session_ids[p]
+                print ("ANIMAL: ", self.animal_id, "  SESSION: ", self.session_id)
 
                 #
-                self.animal_id = self.animal_ids[a]
+                self.fname = self.fnames_svm[p]
 
                 #
-                self.get_sessions()
+                self.process_session_concatenated()
+
                 #
-                for p in range(len(self.session_ids)):
-                    self.session_id = self.session_ids[p]
+                if self.data.shape[0] == 0:
+                    print ("skipping, no data")
+                    print ('')
+                    continue
 
-                    #
-                    self.fname = self.fnames_svm[p]
+                # compute significance
+                self.compute_significance()
 
-                    self.process_session_concatenated()
-                    # print ("a: ", a, self.session_id, self.data.shape)
-                    #
-                    if self.data.shape[0] == 0:
-                        continue
+                # save all the significant vals;
+                sigs.append(self.sig_save)
 
-                    # compute significance
-                    self.compute_significance()
+                #
+                self.sig = self.sig.squeeze()
 
-                    # save all the significant vals;
-                    sigs.append(self.sig_save)
+                # find earliest period of significance, going back in time;
+                for k in range(self.sig.shape[0]-1,0,-1):
+                    if np.isnan(self.sig[k])==True:
+                        break
 
-                    #
-                    self.sig = self.sig.squeeze()
+                #
+                temp = -self.window+k/self.imaging_rate
 
-                    # find earliest period of significance, going back in time;
-                    for k in range(self.sig.shape[0]-1,0,-1):
-                        if np.isnan(self.sig[k])==True:
-                            break
+                # Exclude one of the weird datapoint from the AQ2? session
+                if temp>0:
+                    print ("skipping weird datapoint...")
+                    continue
 
-                    #
-                    temp = -self.window+k/self.imaging_rate
+                #
+                res_continuous.append(temp)
 
-                    # Exclude one of the weird datapoint from the AQ2? session
-                    if temp>0:
-                        #print ("n trials: ", self.n_trials, a,
-                        #       p, temp, self.session_id, self.sig.shape)
-                        continue
+                # find aboslute earliest
+                k_earliest = self.sig.shape[0]
+                for k in range(self.sig.shape[0]-1,0,-1):
+                    if np.isnan(self.sig[k])==True:
+                        k_earliest = k
+                res_earliest.append(-self.window+k_earliest/self.imaging_rate)
 
-                    #
-                    res_continuous.append(temp)
+                #
+                session_nos.append(p)
 
-                    # find aboslute earliest
-                    k_earliest = self.sig.shape[0]
-                    for k in range(self.sig.shape[0]-1,0,-1):
-                        if np.isnan(self.sig[k])==True:
-                            k_earliest = k
-                    res_earliest.append(-self.window+k_earliest/self.imaging_rate)
+                #
+                session_names.append(self.session_id)
 
-                    #
-                    session_nos.append(p)
+                #
+                n_trials.append(self.n_trials)
 
-                    #
-                    session_names.append(self.session_id)
 
-                    #
-                    n_trials.append(self.n_trials)
+            print (" # SESSIONS PROCESSED: ", len(res_continuous))
+            print ('')
+            print ('')
+            print ('')
+            print ('')
+            np.savez(fname_out,
+                     all_res_continuous = res_continuous,
+                     all_res_earliest = res_earliest,
+                     all_session_nos = session_nos,
+                     all_session_names = session_names,
+                     all_n_trials = n_trials,
+                     all_sigs = sigs
+                     )
 
-                # save data
-                all_res_continuous.append(res_continuous)
-                all_res_earliest.append(res_earliest)
-                all_session_nos.append(session_nos)
-                all_session_names.append(session_names)
-                all_n_trials.append(n_trials)
-                all_sigs.append(sigs)
+    def compute_first_decoding_time_curves(self,
+                                        data,
+                                        shift):
 
-            if lockout==False:
-                np.savez(self.main_dir+'/first_decoding_time'+
-                         "_concatenated.npz",
-                         all_res_continuous = all_res_continuous,
-                         all_res_earliest = all_res_earliest,
-                         all_session_nos = all_session_nos,
-                         all_session_names = all_session_names,
-                         all_n_trials = all_n_trials,
-                         all_sigs = all_sigs
-                         )
-            else:
-                np.savez(self.main_dir+'/first_decoding_time'+
-                         "_minTrials"+str(self.min_trials)+
-                         '_lockout_'+
-                         str(self.window)+'sec.npz',
-                         all_res_continuous = all_res_continuous,
-                         all_res_earliest = all_res_earliest,
-                         all_session_nos = all_session_nos,
-                         all_session_names = all_session_names,
-                         all_n_trials = all_n_trials,
-                         all_sigs = all_sigs
-                         )
+        #
+        temp = data
+
+        print ("data ", temp)
+        all_res_continuous_all = np.array(temp)+shift
+
+        bins = np.arange(-15,2,1)
+        #print (all_res_continuous_all)
+        y = np.histogram(all_res_continuous_all, bins = bins)
+
+        return all_res_continuous_all, y[0]
+
+    def plot_first_decoding_time_curves(self,
+                                        data,
+                                        animal_id,
+                                        shift,
+                                        linestyle,
+                                        clr,
+                                        plotting=False):
+
+        #
+        linewidth=5
+        temp = data['all_res_continuous']
+
+        print("temp data allrescontinuous: ", temp.shape)
+
+        #print ("data['all_res_continuous']: ", temp)
+        all_res_continuous_all = np.array(temp)+shift
+
+        #print( "animal_id: ", animal_id, "  # sessions: ", all_res_continuous_all.shape)
+
+        bins = np.arange(-15,2,1)
+        #print (all_res_continuous_all)
+        y = np.histogram(all_res_continuous_all, bins = bins)
+
+        if plotting:
+            plt.plot(y[1][:-1],y[0],
+                 c=clr,
+                 linestyle=linestyle,
+                 linewidth=linewidth,
+                 label=animal_id,
+                 alpha=.8)
+
+        return all_res_continuous_all, y[0]
+
+
 
     def plot_first_decoding_time(self,
                                  data,
                                  return_ids_threshold,
                                  clrs):
 
-        # flag to search for any signfiicant decoding time, not just continous ones
-        earliest = False
+        #
+        all_res_continuous_all = data['all_res_continuous']
+        all_session_names = data['all_session_names']
+        all_session_nos = data['all_session_nos']
 
-        if earliest==False:
+        try:
+            data = np.load(self.main_dir+'/first_decoding_time'+
+                         "_minTrials"+str(self.min_trials)+
+                         '_lockout_'+
+                         str(self.window)+'sec.npz',
+                         allow_pickle=True)
+            all_res_continuous_lockout = data['all_res_continuous']
+        except:
+            all_res_continuous_lockout = []
+            pass
 
-            # data = np.load(self.main_dir+'/first_decoding_time'+
-            #              "_minTrials"+str(self.min_trials)+
-            #              '_all_'+
-            #              str(self.window)+'sec.npz',
-            #              allow_pickle=True)
-            all_res_continuous_all = data['all_res_continuous']
-            all_session_names = data['all_session_names']
-            all_session_nos = data['all_session_nos']
-
-            try:
-                data = np.load(self.main_dir+'/first_decoding_time'+
-                             "_minTrials"+str(self.min_trials)+
-                             '_lockout_'+
-                             str(self.window)+'sec.npz',
-                             allow_pickle=True)
-                all_res_continuous_lockout = data['all_res_continuous']
-            except:
-                all_res_continuous_lockout = []
-                pass
-            #all_n_trials = data['all_n_trials']
-        else:
-            print ("Data missing, skip")
-            return
-
+        # REMOVE A COUPLE OF WEIRD SVM PREDICTION CURVES
         if return_ids_threshold is not None:
             for k in range(len(all_res_continuous_all)):
                 idx = np.where(np.array(all_res_continuous_all[k])<=return_ids_threshold)[0]
@@ -1588,6 +1731,10 @@ class Visualize():
         if self.lockout:
             prefix1 = '_lockout_'+str(self.lockout_window)+"sec"
 
+        prefix3 = ''
+        if self.compute_roi == True:
+            prefix3 = "ROI_"
+
         # select data with pca compression
         prefix2 = ''
         if self.pca_flag:
@@ -1599,16 +1746,64 @@ class Visualize():
         #
         self.fnames_svm = []
         self.session_ids = []
+        self.ideal_sliding_windows = []
         for k in range(len(self.sessions)):
             self.session = os.path.split(self.sessions[k])[1][:-4]
-            self.session_ids.append(self.session)
+            try:
+                self.session = str(self.session,'utf-8')
+            except:
+                pass
 
-            fname = os.path.join(self.main_dir, self.animal_id,
+            if self.concatenated_flag==True:
+                fname = os.path.join(self.main_dir, self.animal_id,
                      'tif_files',
                      self.session,
                      self.session+
                      '_globalPca_min_trials_concatenated200_code_04_30sec_accuracy.npz'
                      )
+                self.ideal_sliding_windows.append(self.sliding_window)
+
+            elif self.regular_flag==True:
+                # animal IA1 has data in the SVM-prediction directory
+                fname = os.path.join(self.main_dir, self.animal_id,
+                                     'SVM_Scores/SVM_Scores_'+prefix3+
+                                     self.session+
+                                     self.code+prefix1+'_trial_ROItimeCourses_'+
+                                     str(self.window)+'sec_Xvalid10_Slidewindow'+
+                                     str(int(self.sliding_window))+'.npz')
+
+                #
+                # data is in the main tif-file session directory
+                if os.path.exists(fname)==False:
+                    print ("    missing svm_scores results: ", fname)
+                    fname = os.path.join(self.main_dir, self.animal_id,'tif_files',
+                                         self.session,
+                                         self.session + "_"+
+                                         self.code+prefix1+'_trial_ROItimeCourses_'+
+                                         str(self.window)+'sec_Xvalid10_Slidewindow'+
+                                         str(int(self.sliding_window))+'.npz')
+                self.ideal_sliding_windows.append(self.sliding_window)
+
+            elif self.ideal_window_flag==True:
+                #
+                fname_ideal_len = os.path.join(self.main_dir, self.animal_id,'tif_files',self.session,
+                                         self.session+"_ideal_window_len.npy")
+                try:
+                    self.sliding_window = np.load(fname_ideal_len)[0]
+                    self.ideal_sliding_windows.append(self.sliding_window)
+                except:
+                    print (" No ideal sliding window computed, skipping", fname_ideal_len)
+                    continue
+
+                print ("IDEAL SLIDING WINDOW: ", self.sliding_window)
+
+                fname = os.path.join(self.main_dir, self.animal_id,
+                                     'SVM_Scores/SVM_Scores_'+prefix3+
+                                     self.session+
+                                     self.code+prefix1+'_trial_ROItimeCourses_30sec_Xvalid10_Slidewindow'+
+                                     str(self.sliding_window)+'.npz')
+
+            self.session_ids.append(self.session)
 
             self.fnames_svm.append(fname)
 
@@ -2076,10 +2271,7 @@ def get_lever_offset(main_dir,
 
     return lever_offset
 
-
-
-
-
+#
 def get_sessions(main_dir,
                  animal_id,
                  session_id):
@@ -2111,44 +2303,6 @@ def get_sessions(main_dir,
     sessions = np.array(sessions)
 
     return sessions
-
-
-def get_sessions2(main_dir,
-                 animal_id,
-                 session_id):
-
-    # load ordered sessions from file
-    sessions = np.load(os.path.join(main_dir,
-                                    animal_id,
-                                   'tif_files.npy'))
-    # grab session names from saved .npy files; remove .tif
-    data = []
-    for k in range(len(sessions)):
-        data.append(os.path.split(sessions[k])[1].replace('.tif',''))
-    sessions = data
-
-    # serach for matchin gsession
-    session_id_out = np.arange(len(sessions))
-    if session_id != 'all':
-        final_session = []
-        for k in range(len(sessions)):
-            if session_id in sessions[k]:
-                final_session = [sessions[k]]
-                break
-        sessions = final_session
-        session_id_out = k
-
-    # fix binary string files issues; remove 'b and ' from file names
-    for k in range(len(sessions)):
-        sessions[k] = str(sessions[k]).replace("'b",'').replace("'","")
-        if sessions[k][0]=='b':
-            sessions[k] = sessions[k][1:]
-
-    #
-    sessions = np.array(sessions)
-
-    return sessions, session_id_out
-
 
 
 def load_trial_times_whole_stack(root_dir,
@@ -2575,15 +2729,8 @@ def get_data_and_triggers(pa):
                                   'tif_files',
                                   pa.session,
                                   'blue_light_frame_triggers.npz')
-    if pa.use_pca_data:
-        fname_data = os.path.join(pa.root_dir,
-                                 pa.animal_id,
-                                 'tif_files',
-                                 pa.session,
-                                 pa.session+ '_whole_stack_trial_ROItimeCourses_15sec_pca30components.npy')
 
-    else:
-        fname_data = os.path.join(pa.root_dir,
+    fname_data = os.path.join(pa.root_dir,
                                  pa.animal_id,
                                  'tif_files',
                                  pa.session,
@@ -2611,11 +2758,6 @@ def get_data_and_triggers(pa):
     X = data_led.reshape(data_led.shape[0],-1)
     #print ("X: ", X.shape)
 
-    if pa.use_pca_data==False:
-        print ("Subsmapling raw 128 x 128 data for pca")
-        X = X[::10]
-
-
     return X, triggers
 
 
@@ -2626,19 +2768,14 @@ def get_pca_object_and_all_points(pa):
 
     fname_all_points = os.path.join(pa.root_dir, pa.animal_id,'tif_files',pa.session,
                                 pa.session+"_all_points.npy")
+    X_30 = []
+    for k in range(0,pa.X.shape[0]-100,pa.sliding_window):
+        X_30.append(pa.X[k:k+pa.sliding_window])
+    X_30 = np.array(X_30)
+    X_30 = X_30.reshape(X_30.shape[0],-1)
+    print(" X data using : ", pa.sliding_window, " number of frames ", X_30.shape)
 
-    print ("fname all points: ", fname_all_points)
-    #
-    print ("pa shape: ", pa.X.shape)
-    if os.path.exists(fname_all_points)==False or pa.recompute==True:
-
-        # loop over all 40000 frames using sliding window and grab data:
-        X_30 = []
-        for k in trange(300,pa.X.shape[0]-300,1):
-            X_30.append(pa.X[k:k+pa.sliding_window])
-        X_30 = np.array(X_30)
-        X_30 = X_30.reshape(X_30.shape[0],-1)
-        print(" X data using : ", pa.sliding_window, " number of frames ", X_30.shape)
+    if os.path.exists(fname_all_points)==False:
 
         # PCA ON ALL DATA
         pca = PCA(n_components=pa.n_pca)
@@ -2782,8 +2919,8 @@ def project_data_umap(pa):
     print (" umap p_levefr resahped: ", p_lever.shape)
 
     return p_lever
-
 def plot_pca_scatter_multi(pa,
+                     n_frames = 30,
                      clr = 'red',
                      plot_all = True,
                      plot_3D=True,
@@ -2830,7 +2967,7 @@ def plot_pca_scatter_multi(pa,
 
     #print ("plever: ", p_lever_knn.shape)
     start = 0
-    end = pa.n_frames
+    end = n_frames
 
    #for k in range(X_lever.shape[0]):
     if plot_flag:
@@ -2905,188 +3042,83 @@ def plot_pca_scatter_multi(pa,
 
     return pa
 
-# def compute_convex_hull_simplex(points_in):
-#
-#      #
-#     from scipy.spatial import ConvexHull
-#
-#     # COMPUTE CONVEX HULL FOR ALL POINTS
-#     #points = all_points_knn[:,:2]
-#     hull = ConvexHull(points_in)
-#     print ("hullsimplices: ", hull.simplices)
-#     points_convex_hull = points_in[hull.simplices]
-#
-#     return points_convex_hull
+def plot_pca_scatter(pa,
+                     n_frames = 30,
+                     plot_all = True,
+                     plot_3D=True):
 
-def plot_pca_scatter(pa):
+    fig =plt.figure()
+    if plot_3D:
+        ax = fig.add_subplot(projection='3d')
+    else:
+        ax =plt.subplot(111)
 
-    #
-    ax =plt.subplot(111)
+    clrs = ['red','pink','yellow']
+    cmap = matplotlib.cm.get_cmap('jet_r')
 
-    cmap = pa.cmap
-
-    # idx = np.arange(pa.all_points.shape[0])
-    # print (idx.shape)
+    idx = np.arange(pa.all_points.shape[0])
+    print (idx.shape)
 
     print ("plever: ", pa.p_lever.shape)
     start = 0
-    end = pa.n_frames
+    end = n_frames
 
-
-    #############################################
-    ########## PLOT LEVER DYNAMICS ##############
-    #############################################
-    from sklearn.neighbors import NearestNeighbors
-    if pa.knn_triage is not None:
-        triage_value = pa.knn_triage
-        knn_triage_threshold = 100*(1-triage_value)
-
-        ########### LEVER PULL #############
-        p_lever_triaged = []
-
-        # this function triages based only on t=0, i.e. not at every time point; makes better plots
-        # also do triage based on first 2 dimensions
-        if pa.knn_triage_based_on_last_point:
-            temp_points = pa.p_lever[0,:,:2]
-            print ("data-in: ", temp_points.shape)
-
-            # print ("temp points: ", temp_points.shape)
-            idx_keep = knn_triage(knn_triage_threshold, temp_points)
-            idx_keep = np.where(idx_keep==1)[0]
-
-            pa.p_lever_plot = pa.p_lever[:,idx_keep]
-            print ("temp_points post: ", pa.p_lever_plot .shape)
-
-        #
-        else:
-            for k in trange(pa.p_lever.shape[0], desc='triaging activity'):
-                temp_points = pa.p_lever[k,:,:2]
-
-                # print ("temp points: ", temp_points.shape)
-                idx_keep = knn_triage(knn_triage_threshold, temp_points)
-                idx_keep = np.where(idx_keep==1)[0]
-
-                temp_points = temp_points[idx_keep]
-                p_lever_triaged.append(temp_points)
-
-            p_lever_triaged = np.array(p_lever_triaged)
-            pa.p_lever_plot = p_lever_triaged
-
-        ############ ALL POINTS #############
-        if pa.plot_all:
-            temp_points = pa.all_points
-
-            print ("all points pre triage: ", temp_points.shape)
-            idx_keep = knn_triage(knn_triage_threshold, temp_points)
-            idx_keep = np.where(idx_keep==1)[0]
-            temp_points = temp_points[idx_keep]
-            print ("all points post triage: ", temp_points.shape)
-
-            pa.all_points_plot = temp_points
-
-    else:
-        pa.p_lever_plot = pa.p_lever
-        pa.all_points_plot = pa.all_points
-
-    #############################################
-    ########## PLOT LEVER DYNAMICS ##############
-    #############################################
-    if pa.plot_all:
-        ax.scatter(pa.all_points_plot[:,0],
-                   pa.all_points_plot[:,1],
-                    c='black',
-                    s=100,
-                    #edgecolor = 'black',
-                    alpha=pa.alpha2)
-
+    #
+    #for k in range(X_lever.shape[0]):
     for k in range(start,end,1):
-        ax.scatter(pa.p_lever_plot[k,:,0],
-                   pa.p_lever_plot[k,:,1],
+        if plot_3D:
+            ax.scatter(pa.p_lever[k,:,0],
+                       pa.p_lever[k,:,1],
+                       pa.p_lever[k,:,2],
                     color=cmap(k/(end-start)),
                     s=20,
-                    edgecolor = 'black',
-                    alpha=pa.alpha1)
+                    edgecolor = 'black', alpha=.8)
+        else:
+            ax.scatter(pa.p_lever[k,:,0],
+                       pa.p_lever[k,:,1],
+                    color=cmap(k/(end-start)),
+                    s=20,
+                    edgecolor = 'black', alpha=.8)
 
-    ax.scatter(pa.p_lever_plot[0,:,0],
-           pa.p_lever_plot[0,:,1],
-           color='blue',
-           s=100,
-           edgecolor = 'black',
-           alpha=pa.alpha1)
+    if plot_3D:
 
-    #############################################
-    ####### PLOT CONVEX HULL SIMPLEX ############
-    #############################################
-    # PLOT T=0
-    points_in = pa.p_lever_plot[0,:,:2]
-    simplex = convexhull(points_in) #-np.mean(points_in,axis=0)*2
+        if plot_all:
+            ax.scatter(pa.all_points[idx,0],
+                   pa.all_points[idx,1],
+                   pa.all_points[idx,2],
+                    c='black',
+                    s=20,
+                    edgecolor = 'black', alpha=.2)
 
-    linewidth=pa.linewidth
-    clr='blue'
-    plot_convex_hull_function(simplex,clr,linewidth)
+        ax.scatter(pa.p_lever[0,:,0],
+                   pa.p_lever[0,:,1],
+                   pa.p_lever[0,:,2],
+                    color='red',
+                    s=100,
+                    edgecolor = 'black', alpha=.8)
 
-    ###################################################
-    # PLOT T=0..30
-    points_in = pa.p_lever_plot[:,:,:2].reshape(-1,2)
-    simplex = convexhull(points_in) #-np.mean(points_in,axis=0)*2
+    else:
 
-    plot_convex_hull_function(simplex,'red',linewidth)
+        if plot_all:
+            ax.scatter(pa.all_points[idx,0],
+                   pa.all_points[idx,1],
+                    c='black',
+                    s=100,
+                    edgecolor = 'black', alpha=.8)
 
-    ###################################################
-    # PLOT ALL POINTS
-    points_in = pa.all_points_plot[:,:2]
+        ax.scatter(pa.p_lever[0,:,0],
+                   pa.p_lever[0,:,1],
+                    color='red',
+                    s=100,
+                    edgecolor = 'black', alpha=.8)
 
-    # reverse KNN triage to keep just outliers
-    if False:
-        triage_value = 0.10
-        knn_triage_threshold = 100*(1-triage_value)
-
-        # print ("temp points: ", temp_points.shape)
-        idx_keep = knn_triage(knn_triage_threshold,
-                              points_in)
-
-        idx_outliers = np.where(idx_keep==0)[0]
-        points_in = points_in[idx_outliers]
-
-    print ("computing hull of all points...", points_in.shape)
-
-    simplex = convexhull(points_in) #-np.mean(points_in,axis=0)*2
-
-    plot_convex_hull_function(simplex,'black',linewidth)
-
-
-
-
-   # print ("simplex: ", simplex.shape)
-
-def plot_convex_hull_function(simplex, clr, linewidth):
-
-    for k in range(simplex.shape[0]-1):
-        plt.plot([simplex[k,0], simplex[k+1,0]],
-                 [simplex[k,1], simplex[k+1,1]],
-                 c=clr,
-                 linewidth=linewidth
-                 )
     #
-    plt.plot([simplex[0,0], simplex[-1,0]],
-             [simplex[0,1], simplex[-1,1]],
-             c=clr,
-             linewidth=linewidth
-             )
-
-#
-def plot_convex_hull_function_2points(ax,simplex, clr, linewidth):
-
-    for k in range(simplex.shape[0]):
-        pt1 = simplex[k][0]
-        pt2 = simplex[k][1]
-        #print (pt1, pt2)
-        ax.plot([pt1[0], pt2[0]],
-                 [pt1[1], pt2[1]],
-                 c=clr,
-                 linewidth=linewidth
-                 )
-
+    # if False:
+    #     plt.savefig('/home/cat/pca_all_plus_levers.png',dpi=300)
+    #     plt.close()
+    # else:
+    #     plt.show()
+    #                                    #
 
 def plot_pca_scatter_lever_and_body_movements(pa, plot_3D=True):
 
@@ -3310,11 +3342,11 @@ def plot_convex_hull(pa):
         [ x[i] for i in [3,1,2,0] ]
         for x in plt.gca().get_legend_handles_labels()
     ), handletextpad=0.75, loc='best',
-              fontsize=8)
+              fontsize=20)
 
     plt.ylim(0,1)
     plt.xlim(t[0],t[-1])
-    #plt.show()
+    plt.show()
 
 
 
@@ -3570,7 +3602,6 @@ def pca_scatter_body_movements_fig3(pa, sessions):
             if pa.plot_flag:
                 fig = plt.figure(figsize=(5,5))
 
-            # loop over body parts?!?!?
             for k in range(5):
                 pa.k=k
 
@@ -3631,13 +3662,13 @@ def pca_scatter_body_movements_fig3(pa, sessions):
                              plot_all=pa.plot_all,
                              plot_3D = pa.plot_3D,
                              plot_flag = pa.plot_flag)
-            # ADD LEVER POINTS
+
             pa_simplex.append(pa.points_simplex)
 
             ########################################
             ######### ADD ALL POINTS TO END ########
             ########################################
-            # ADD ALL POINTS
+
             pa_simplex.append(pa.points_simplex_all_points)
 
             #
@@ -3668,25 +3699,10 @@ def pca_scatter_body_movements_fig3(pa, sessions):
 
 
 
-def convexhull(pts):
-    pts = np.array(pts)
-
-    ch = ConvexHull(pts)
-
-    # # hull_indices = ch.vertices   # This will work in the scipy 0.13
-    # hull_indices = np.unique(ch.simplices.flat)
-    # hull_pts = pts[hull_indices, :]
-    #
-    # ch = ConvexHull(pts)
-
-    # Get the indices of the hull points.
-    hull_indices = ch.vertices
-
-    # These are the actual points.
-    hull_pts = pts[hull_indices, :]
-
-
-    return hull_pts
+def convexhull(p):
+    p = np.array(p)
+    hull = ConvexHull(p)
+    return p[hull.vertices,:]
 
 
 
@@ -3705,9 +3721,6 @@ def plot_intersection_convex_hulls_lever_vs_bodyparts(res_simplex,
     lever_vs_right_paw = []
     lever_vs_all = []
     n_trials = []
-
-    print ("LEn simplex: ", len(res_simplex))
-
     for k in range(len(res_simplex)):
 
         # find # of lever pulls in sessions
@@ -3739,8 +3752,6 @@ def plot_intersection_convex_hulls_lever_vs_bodyparts(res_simplex,
         polygons = []
         for p in range(len(pa_simplex)-1):
             pol_temp = []
-
-            # check to see if body part simplxe is avaliable
             if len(pa_simplex[p])>0:
                 for aa in range(pa_simplex[p].shape[0]):
                     temp = pa_simplex[p][aa].T
@@ -3760,16 +3771,10 @@ def plot_intersection_convex_hulls_lever_vs_bodyparts(res_simplex,
 
                     pol_temp.append(temp.T[0])
                     pol_temp.append(temp.T[1])
-
-                #
                 pol_temp = np.vstack(pol_temp)
-                print ("pol_temp: ", pol_temp.shape)
                 pol_temp = np.unique(pol_temp,axis=0)
-                print ("pol_temp: ", pol_temp.shape)
                 pol_temp = convexhull(pol_temp)
                 polygons.append(pol_temp)
-
-            # body part simplex was not availble
             else:
                 polygons.append([])
 

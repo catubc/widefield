@@ -2314,7 +2314,7 @@ def run_svm_single_randomized_kFold(run_id,
     accuracy2=[]
     labels2 = []
     pred2 = []
-    for k in trange(0, trials.shape[2]-sliding_window, 1):
+    for k in range(0, trials.shape[2]-sliding_window, 1):
         X = train#[:,:,:window]
         X = X[:,:,k:k+sliding_window]# .transpose(0,2,1)
         X = X.reshape(X.shape[0],-1)
@@ -2334,13 +2334,12 @@ def run_svm_single_randomized_kFold(run_id,
         #########################################
         #
         if gpu_flag:
-            from thundersvm import SVC
-            clf = SVC(kernel=method)
+            import thundersvm
+            clf = thundersvm.SVC(kernel=method)
             clf.fit(X, labels_train)
 
         else:
             clf = svm.SVC(kernel=method)
-            # y = labels_train
             clf.fit(X, labels_train)
 
         #
@@ -2622,25 +2621,36 @@ class PredictSVMChoiceSuperSession():
 
 
 
-    def predict3(self, trials, random, features):
+    def predict3(self, trials, random, fname_out):
         ''' Predict2 is an updated version which uses sklearn tools for svm instead of
         coding from scratch
         '''
 
         #
-        fname_out = '/home/cat/'+self.animal_id+"_"+str(features)+'_super_res.npz'
+        #fname_out = '/home/cat/'+self.animal_id+"_"+str(features)+'_super_res.npz'
 
-        #
-        if os.path.exists(fname_out)==False:
-            self.trials = trials
-            self.random = random
-            accuracy, labels, predictions = self.compute_accuracy_svm_KFold()
+        # loop over sliding windows
+        n_trials_min = 200
+        sliding_window = 50
+        for k in range(0,trials.shape[0],sliding_window):
+            fname_save = fname_out.replace('.npz','_'+str(k)+"_super_res.npz")
 
             #
-            np.savez(fname_out,
-                    accuracy = accuracy,
-                    labels = labels,
-                    predictions = predictions)
+            if os.path.exists(fname_save)==False:
+                self.trials = trials[k:k+n_trials_min]
+                self.random = random[k:k+n_trials_min]
+
+                if self.trials.shape[0]<30:
+                    continue
+
+                print ("   start: ", k, " end: ", k+n_trials_min,  " / ", trials.shape[0])
+                accuracy, labels, predictions = self.compute_accuracy_svm_KFold()
+
+                #
+                np.savez(fname_save,
+                        accuracy = accuracy,
+                        labels = labels,
+                        predictions = predictions)
 
 
     #
@@ -2674,7 +2684,7 @@ class PredictSVMChoiceSuperSession():
                                self.method,
                                self.gpu_flag,
                                pm_processes = self.n_cores,
-                               pm_pbar=True)
+                               pm_pbar=False)
         else:
             data = []
             for k in range(run_ids.shape[0]):
