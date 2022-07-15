@@ -326,6 +326,9 @@ def load_data_rois_lever_pulls_body_lockout(
     #
     d1 = dall['whole_stack'].T
 
+    #
+    area_names = dall['areanames_area']
+
     # zero out beginning and end, usually they are screwed up by excitation light
     d1[:900]=d1[900]
     d1[-900:]=d1[-900]
@@ -526,13 +529,14 @@ def load_data_rois_lever_pulls_body_lockout(
         all_behaviors.append(times_body_parts[k])
 
     #
-    return stack, stack_random, names, all_behaviors
+    return stack, stack_random, names, all_behaviors, area_names
 #
 
 def generate_body_movement_lockout_data(n_sec_lockouts,
                                        body_feats_lockouts,
                                        animal_ids,
                                        root_dir,
+                                       recompute=True
                                        ):
 
     # loop over sec lockout
@@ -560,7 +564,7 @@ def generate_body_movement_lockout_data(n_sec_lockouts,
                          str(n_sec_lockout)+"secLockout_"+
                          str(body_feats_lockout)+"bodyfeats.npz"
                          )
-                if os.path.exists(fname_out_animal):
+                if os.path.exists(fname_out_animal) and not recompute:
                     print ("File already exists: ", fname_out_animal)
                     continue
 
@@ -574,10 +578,14 @@ def generate_body_movement_lockout_data(n_sec_lockouts,
                 all_random = []
                 all_behaviors = []
                 all_names = []
+                all_session_names = []
+                all_session_trial_indexes = []
+                all_area_names = []
+                #session_names = []
 #                 for session in tqdm(sessions, desc=animal_id+"_"+
 #                                     str(n_sec_lockout)+"_"+
 #                                     str(body_feats_lockout)):
-
+                trial_index = 0
                 for session in (sessions):
                     session = os.path.split(session)[1]
                     # check that code04 exists in file
@@ -595,11 +603,19 @@ def generate_body_movement_lockout_data(n_sec_lockouts,
                     (data_segments,
                      data_segments_random,
                      names,
-                     behaviors) = load_rois_lever_pulls_body_lockout(root_dir,
+                     behaviors,
+                     area_names1) = load_rois_lever_pulls_body_lockout(root_dir,
                                                                      animal_id,
                                                                      session,
                                                                      n_sec_lockout,
                                                                      body_feats_lockout)
+
+
+                    # save metadata
+                    all_session_names.append(session)
+                    all_session_trial_indexes.append([trial_index, trial_index+times04.shape[0]])
+                    trial_index += times04.shape[0]
+                    all_area_names.append(area_names1)
 
                     ######################################
                     ######### MAKE TRAINING DATA #########
@@ -647,7 +663,10 @@ def generate_body_movement_lockout_data(n_sec_lockouts,
                          trials = all_trials,
                          random = all_random,
                          behaviors = all_behaviors,
-                         names = all_names
+                         names = all_names,
+                         all_area_names = all_area_names,
+                         all_session_names = all_session_names,
+                         all_session_trial_indexes = all_session_trial_indexes
                         )
 
 
@@ -788,7 +807,7 @@ def load_rois_lever_pulls_body_lockout(root_dir,
 
     if os.path.exists(fname_whole_stack_ROI)==False:
         print ("whole stack missing", session)
-        return np.zeros(0,'int32'),np.zeros(0,'int32'),np.zeros(0,'int32'),np.zeros(0,'int32')
+        return np.zeros(0,'int32'),np.zeros(0,'int32'),np.zeros(0,'int32'),np.zeros(0,'int32'),np.zeros(0,'int32')
 
 
     # same for both PCA and ROI
@@ -811,7 +830,8 @@ def load_rois_lever_pulls_body_lockout(root_dir,
     (data_segments,
      data_segments_random,
      names,
-     all_behaviors) = load_data_rois_lever_pulls_body_lockout(
+     all_behaviors,
+     area_names) = load_data_rois_lever_pulls_body_lockout(
                                                              root_dir,
                                                              animal_id,
                                                              session,
@@ -829,7 +849,7 @@ def load_rois_lever_pulls_body_lockout(root_dir,
         data_segments_random[k] -= data_segments_random[k].mean(0)
 
     #
-    return data_segments, data_segments_random, names, all_behaviors
+    return data_segments, data_segments_random, names, all_behaviors, area_names
 
   
 # 

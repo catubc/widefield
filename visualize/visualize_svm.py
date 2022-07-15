@@ -209,12 +209,11 @@ class Visualize():
         main_dir = os.path.join(self.main_dir,
                                 self.animal_id,
                                 'tif_files')
-
-        try:
-            session_corrected = os.path.split(
-                            glob2.glob(main_dir+"/*"+self.session_id+"*")[0])[1]
-        except:
-
+        if True:
+            text = main_dir+"/*"+self.session_id+"*"
+            session_corrected = os.path.split(glob2.glob(text)[0])[1]
+        else:
+            print ("ERROR loading")
             self.n_trials = 0
             return
 
@@ -1085,7 +1084,7 @@ class Visualize():
         linewidth=5
         temp = data['all_res_continuous']
 
-        print("temp data allrescontinuous: ", temp.shape)
+        # print("temp data allrescontinuous: ", temp.shape)
 
         #print ("data['all_res_continuous']: ", temp)
         all_res_continuous_all = np.array(temp)+shift
@@ -1247,7 +1246,7 @@ class Visualize():
     def plot_first_decoding_time_vs_n_trials(self,
                                              clr,
                                              fname=None):
-        #labels = ["M1", "M2", "M3", "M4","M5",'M6']
+        labels = ["M1", "M2", "M3", "M4","M5",'M6']
 
         # flag to search for any signfiicant decoding time, not just continous ones
         earliest = False
@@ -1314,10 +1313,6 @@ class Visualize():
                         c=np.arange(trials1.shape[0])+20,
                         edgecolors='black',
                         cmap=self.cmap)
-
-            #
-            #all_preds.extend(self.predictions1)
-            #all_trials.extend(self.trials1)
 
             #self.fit_exp(all_preds, all_trials, ax)
             self.fit_line(predictions1,
@@ -1401,6 +1396,122 @@ class Visualize():
 
         plt.suptitle("All sessions all trials")
 
+
+    def plot_significant_fname(self, clr, label, fname):
+
+        # set continuos to
+        self.earliest_continuous = np.nan
+
+        # GET FILENAME IF EXISTS
+        #self.get_fname()
+        self.fname = fname
+        #if self.fname is None:
+        #    print ("no file, exiting")
+        #    return
+
+        # PROCESS SESSION
+        self.process_session()
+
+        # COUNT TRIALS
+        self.n_trials_plotting.append(self.n_trials)
+        if self.n_trials==0 or self.data.shape[0]==0:
+            return
+        print ("self n trials: ", self.n_trials)
+
+        # COMPUTE TIME WINDOW FOR PLOTTING
+        t = np.linspace(self.xlim[0], self.xlim[1], self.mean.shape[0])
+        plt.plot(t,
+                 self.mean,
+                 c=clr,
+                 label = label + " # trials: "+str(self.n_trials),
+                 linewidth=self.linewidth,
+                 alpha=self.alpha)
+
+        # FILL IN STD FOR RESULTS
+        plt.fill_between(t, self.mean-self.std, self.mean+self.std, color=clr, alpha = 0.2)
+
+        # COMPUTE SIGNIFICANCE
+        self.compute_significance()
+
+        if self.show_EDT:
+            self.ax.annotate("EDT: "+str(round(self.earliest_continuous,2))+"sec",
+                         xy=(self.earliest_continuous, 0.5),
+                         xytext=(self.earliest_continuous-3+self.edt_offset_x,
+                                 0.75+self.edt_offset_y),
+                         arrowprops=dict(arrowstyle="->"),
+                         fontsize=20,
+                         color=clr)
+            self.edt_offset+=0.02
+            x = self.earliest_continuous
+
+            #
+            if True:
+                plt.fill_between([x,0], 0,1.0 ,
+                             color='grey',alpha=.2)
+
+        # PLOT SIGNIFICANCE IMAGE BARS
+        vmin=0.0
+        vmax=self.significance
+        axins = self.ax.inset_axes((0,1-self.cbar_thick-self.cbar_offset,1,self.cbar_thick))
+        axins.set_xticks([])
+        axins.set_yticks([])
+
+        im = axins.imshow(self.sig,
+                          vmin=vmin,
+                          vmax=vmax,
+                          aspect='auto',
+                          #cmap='viridis_r')
+                          cmap=self.cmap)
+
+        #
+        ticks = np.round(np.linspace(vmin, vmax, 4),8)
+        print ("vmin, vmax; ", vmin, vmax, "ticks: ", ticks)
+        #fmt = '%1.4f'
+        fmt='%.0e'
+        #
+        if self.cbar:
+            cbar = self.fig.colorbar(im,
+                                ax=self.ax,
+                                shrink=0.2,
+                                ticks=ticks,
+                                format = fmt)
+
+            cbar.ax.tick_params(labelsize=25)
+
+        # APPLY STANDARD FORMATS
+        self.format_plot(self.ax)
+
+        #
+        if self.shift_SVM:
+            try:
+                fname = os.path.join(self.main_dir, self.animal_id,
+                         'tif_files',
+                         self.session,
+                         'shift.txt'
+                         )
+
+                shift = float(np.loadtxt(fname))
+                print ("SHIFT REQUIRD: ", fname, " ", shift)
+
+            except:
+                shift = 0
+
+        else:
+            shift= 0
+
+        if self.show_title:
+            plt.title(self.animal_id + "  session: "+str(self.session) +
+                  "\n smoothing window: "+str(round(self.smooth_window/30.,1))+"sec"+
+                  "\n [Ca] <-> DLC shift: "+str(round(shift,2))+" sec")
+
+        #
+        self.cbar_offset+=self.cbar_thick
+        if self.show_legend:
+            plt.legend(loc=self.legend_location,
+                   fontsize=20)
+
+        # for multi axes plots
+        self.plotted = True
 
 
     def plot_significant(self, clr, label):

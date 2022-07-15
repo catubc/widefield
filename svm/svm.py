@@ -1461,6 +1461,11 @@ class PredictSVMChoice():
                                  '.npz'
                                  )
 
+
+            # rename the prediction file
+            if self.filter_locaNMF:
+                fname_out = fname_out.replace('.npz','_.3HzFilter.npz')
+
             if os.path.exists(fname_out) and self.overwrite==False:
                 print ("   already computed, skipping ...", fname_out)
                 print ("")
@@ -1495,8 +1500,33 @@ class PredictSVMChoice():
 
             # exclude small # of trial data
             if trial_courses_fixed.shape[0]<=1:
-                print ("  Insuffciient trials, exiting...")
+                print ("  Insufficient trials, exiting...")
                 continue
+
+
+            if self.filter_locaNMF:
+                # filter data
+                cutoff_freq = 0.3
+                nyq_freq = 30
+                print (trial_courses_fixed.shape, trial_courses_random_fixed.shape)
+                for t in range(trial_courses_fixed.shape[0]):
+                    for p in range(trial_courses_fixed.shape[1]):
+                        trial_courses_fixed[t,p] = self.butter_lowpass_filter(
+                                                                    trial_courses_fixed[t,p],
+                                                                    cutoff_freq,
+                                                                    nyq_freq,
+                                                                    order=4)
+
+                for t in range(trial_courses_random_fixed.shape[0]):
+                    for p in range(trial_courses_random_fixed.shape[1]):
+                        trial_courses_random_fixed[t,p] = self.butter_lowpass_filter(
+                                                                    trial_courses_random_fixed[t,p],
+                                                                    cutoff_freq,
+                                                                    nyq_freq,
+                                                                    order=4)
+
+                np.save(fname[:-4]+'_.3hzfiltered.npy', trial_courses_fixed)
+                np.save(fname.replace('trial','random')[:-4]+'_.3hzfiltered.npy', trial_courses_random_fixed)
 
             #
             self.trials = trial_courses_fixed
@@ -1510,11 +1540,26 @@ class PredictSVMChoice():
                     predictions = predictions)
 
 
-
-            #
-            #np.save(fname_out,accuracy)
-
         print ("DONE predicting SVM on animal: ", self.animal_id)
+
+
+
+    def butter_lowpass(self, cutoff, nyq_freq, order=4):
+        from scipy.signal import butter, lfilter, filtfilt, hilbert, chirp
+
+        normal_cutoff = float(cutoff) / nyq_freq
+        b, a = butter(order, normal_cutoff, btype='lowpass')
+        return b, a
+
+    def butter_lowpass_filter(self, data, cutoff_freq, nyq_freq, order=4):
+        from scipy.signal import butter, lfilter, filtfilt, hilbert, chirp
+        # Source: https://github.com/guillaume-chevalier/filtering-stft-and-laplace-transform
+        b, a = self.butter_lowpass(cutoff_freq, nyq_freq, order=order)
+        y = filtfilt(b, a, data)
+        return y
+
+
+
 
     #
     def predict_ROI(self):
@@ -1651,6 +1696,7 @@ class PredictSVMChoice():
                                self.random,
                                self.sliding_window,
                                self.method,
+                               self.gpu_flag,
                                pm_processes = self.n_cores,
                                pm_pbar=True)
         else:
@@ -1664,7 +1710,8 @@ class PredictSVMChoice():
                                                            self.trials,
                                                            self.random,
                                                            self.sliding_window,
-                                                           self.method)
+                                                           self.method,
+                                                           self.gpu_flag)
                             )
 
         #
@@ -2014,7 +2061,9 @@ class PredictSVMConcatenated():
                                            self.trials,
                                            self.random,
                                            self.sliding_window,
-                                           self.method,                                           pm_processes = self.xvalidation,
+                                           self.method, 
+                                           self.gpu_flag,
+                                           pm_processes = self.xvalidation,
                                            pm_pbar=False)
 
         else:
@@ -2029,7 +2078,8 @@ class PredictSVMConcatenated():
                                                            self.trials,
                                                            self.random,
                                                            self.sliding_window,
-                                                           self.method))
+                                                           self.method,
+														   self.gpu_flag))
 
 
         #
@@ -2115,7 +2165,9 @@ class PredictSVMConcatenated():
                                                self.trials,
                                                self.random,
                                                self.sliding_window,
-                                               self.method,                                           pm_processes = self.xvalidation,
+                                               self.method,
+                                               self.gpu_flag,
+                                               pm_processes = self.xvalidation,
                                                pm_pbar=False)
 
             else:
@@ -2130,7 +2182,8 @@ class PredictSVMConcatenated():
                                                                self.trials,
                                                                self.random,
                                                                self.sliding_window,
-                                                               self.method))
+                                                               self.method,
+                                                               self.gpu_flag))
 
 
             #
@@ -2636,7 +2689,7 @@ class PredictSVMChoiceSuperSession():
             fname_save = fname_out.replace('.npz','_'+str(k)+"_super_res.npz")
 
             #
-            if os.path.exists(fname_save)==False:
+            if os.path.exists(fname_save)==False or self.overwrite==True:
                 self.trials = trials[k:k+n_trials_min]
                 self.random = random[k:k+n_trials_min]
 
