@@ -5,12 +5,18 @@ import numpy as np
 import pickle as pk
 
 import glob
+import sys
+sys.path.append("/home/cat/code/widefield/") # Adds higher directory to python modules path.
+
 
 import string, re
 from scipy.signal import butter, filtfilt, cheby1
 from sklearn.decomposition import PCA
 import parmap
 from tqdm import tqdm, trange
+
+from locanmf import LocaNMF, postprocess
+from locanmf import analysis_fig4 
 
 import os
 
@@ -257,41 +263,57 @@ class ProcessCalcium():
             suffix = '4TBSSD'
         elif '1TB' in self.main_dir:
             suffix = '1TB'
+        elif '/home/cat/data' in self.main_dir:
+            suffix = 'data'
         else:
             print ("New computer need to reset file locations")
             suffix = '4TBSATA'
             #return None
 
         index = None
+        rec_filename2 = os.path.split(rec_filename)[1]
+        print ('searching for recording: ', rec_filename2)
         for k in range(len(temp_tif_files)):
-            try:
-                temp_temp = temp_tif_files[k].decode("utf-8").replace('12TB/in_vivo/tim',suffix).replace(
-                                                        '10TB/in_vivo/tim',suffix)#.replace("b'/", "'/")
-            except:
-                temp_temp = temp_tif_files[k].replace('12TB/in_vivo/tim',suffix).replace(
-                                                        '10TB/in_vivo/tim',suffix)#.replace("b'/", "'/")
-            if rec_filename in temp_temp:
+            #print ("temp tif files: ", temp_tif_files[k])
+            # try:
+            #     temp_temp = temp_tif_files[k].decode("utf-8").replace('12TB/in_vivo/tim',suffix).replace(
+            #                                             '10TB/in_vivo/tim',suffix)#.replace("b'/", "'/")
+            # except:
+            #     temp_temp = temp_tif_files[k].replace('12TB/in_vivo/tim',suffix).replace(
+            #                                             '10TB/in_vivo/tim',suffix)#.replace("b'/", "'/")
+            # # 
+            temp_temp = temp_tif_files[k].replace('/media/cat/12TB/in_vivo/tim/yuki',
+                                                  '/home/cat/data/')
+
+            if rec_filename2 in temp_temp:
                 index = k
+                print ("Found file: ", )
                 break
+        
+        #
+        print ("found: ", rec_filename2, " index: ", index)
+        #img_rate = float(np.loadtxt(os.path.join(root_dir, 'img_rate.txt')))
+        print ("fixing img rate to 30hz", img_rate)
+        img_rate = 30
 
-        if index == None:
-            print ("DID NOT FIND MATCH between imaging and lever ---- RETURNING ")
+        #
+        #reclength = self.load_reclength(raw_path)
+        
+        #
+        print ("File index: ", index)
+        print (temp_event_files.shape)
+        print ('fond file: ', temp_event_files[index])
+        fname_event = temp_event_files[index].replace('/media/cat/12TB/in_vivo/tim/yuki/',
+                                                      '/home/cat/data/')
+        reclength = self.load_reclength(fname_event)
+        print ("reclength: ", reclength)                           
 
-            # zero out locs selected because session can't be used
-            fname_out1 = os.path.split(self.fname_04)[0]
-            fname_out2 = os.path.split(fname_out1)[1]
-            np.savetxt(self.fname_04[:-4]+"_all_locs_selected.txt" , [])
-            np.savetxt(fname_out1+'/'+fname_out2+"_all_locs_selected.txt" , [])
-
-            #
-            return np.zeros((0),'float32')
-
-        try:
-            reclength = self.load_reclength(str(temp_event_files[index]).replace("b'",'').replace(
-                                                "'",'').replace('12TB/in_vivo/tim',suffix))
-        except:
-            reclength = self.load_reclength(str(temp_event_files[index]).replace("b'",'').replace(
-                                                "'",'').replace('10TB/in_vivo/tim',suffix))
+        # try:
+        #     reclength = self.load_reclength(str(temp_event_files[index]).replace("b'",'').replace(
+        #                                         "'",'').replace('12TB/in_vivo/tim',suffix))
+        # except:
+        #     reclength = self.load_reclength(str(temp_event_files[index]).replace("b'",'').replace(
+        #                                         "'",'').replace('10TB/in_vivo/tim',suffix))
 
         if reclength ==0:
             print ("zero length recording exiting (excitation light failure)", recording)
@@ -361,6 +383,7 @@ class ProcessCalcium():
         ##################################################
         ##################################################
         ##################################################
+        print ("... made it to trigger loop...")
         # initialize data stack - helps a bit with speed instead of lists
         data_stm = np.zeros((len(img_frame_triggers),(int(window)*2+1), 128, 128))
         counter = 0
@@ -607,6 +630,7 @@ class ProcessCalcium():
 
         #
         if self.whole_stack == True:
+            print ('selected whole stack ooption... processing now...')
             locs_selected, locs_selected_with_lockout = self.get_triggers_bodyparts_whole_stack(recording)
 
             # must also load locs for code_04 in cases where no movements / videos are present but we still want to
@@ -634,10 +658,12 @@ class ProcessCalcium():
             return
 
         #
-        if len(locs_selected)==0:
-            if self.verbose:
-                print (" ... session has no events ", recording)
-            return
+        # if len(locs_selected) == 0:
+        #     if getattr(self, 'whole_stack', False):
+        #         print("⚠️  No triggers found, continuing for whole_stack mode anyway")
+        #     else:
+        #         print("... session has no events")
+        #         return
         
         # GENERATE SAVE FILENAMES FOR ALL CODE_04 DATA
         fname_04 = (root_dir + '/tif_files/' + recording + '/' + recording + "_"+feature_name+
@@ -651,8 +677,20 @@ class ProcessCalcium():
 
         #if self.verbose:
         #    print ("fname-locs: ", fname_locs)
-        np.savetxt(fname_locs, locs_selected)
+        #np.savetxt(fname_locs, locs_selected)
+        
+        if not os.path.exists(os.path.dirname(fname_locs)):
+            os.makedirs(os.path.dirname(fname_locs), exist_ok=True)
 
+        if len(locs_selected) > 0:
+            np.savetxt(fname_locs, locs_selected)
+        elif not getattr(self, 'whole_stack', False):
+            # You’re not in whole stack, but you have no triggers: fail safely
+            print("❌ No triggers and not in whole_stack mode — skipping")
+            return
+    
+
+        print ("RUNNING gen arrays rOI triggered...")
         #
         self.generate_arrays_ROI_triggered(root_dir,
                                              dff_method,
@@ -669,6 +707,8 @@ class ProcessCalcium():
                                              fname_filter,
                                              pca_denoise_flag
                                              )
+        
+
 
         # just compute PCA and return;
         if self.feature_name=="whole_stack":
@@ -697,6 +737,8 @@ class ProcessCalcium():
                                              fname_filter,
                                          pca_denoise_flag)
 
+        print ('')
+        print ('')
 
 
     #
@@ -834,7 +876,7 @@ class ProcessCalcium():
 
         if os.path.exists(fname_time_filters) and self.export_blue_light_times==False and self.recompute==False:
             print ("  ... data already processed", fname_time_filters)
-            return
+            #return
 
         #
         fname_pca = fname_04[:-4]+"_pca.pkl"
@@ -850,31 +892,41 @@ class ProcessCalcium():
             if os.path.exists(fname_04) and os.path.exists(fname_random) and self.recompute==False:
                 return
 
-        ########################################################
-        ### COMPUTE DFF AND MAKE PCA OBJECT FOR TRIAL  DATA ####
-        ########################################################
-        if os.path.exists(fname_pca)==False or self.whole_stack==False or self.recompute==True:
-            data_stm = self.compute_DFF_function(
-                                root_dir,
-                                dff_method, # 'globalAverage' or 'slidingWindow'
-                                recording,
-                                locs_selected,
-                                n_sec_window
-                                )
+        ####################################
+        ######## DENOISE DATA ##############
+        ####################################
+        # compute PCA denoised STM for regular data;
+        if self.whole_stack:
+            fname_out_temporal = fname_04[:-4]+"_pca30components.npy" 
+            fname_out_spatial = fname_04[:-4]+"_pca30components_spatial.npy"
 
-            # return if DFF data is none
-            if data_stm.shape[0]==0:
-                print ("data_stm is empty (could not compute stm, skipping : ", recording, " )")
-                return
+            # if file exist skipt his
+            if os.path.exists(fname_out_temporal) and os.path.exists(fname_out_spatial) and self.recompute==False:
+                print ("  ... data already processed", fname_out_temporal)
+            
+            else:
 
-            # # save data_stm stack
-            # if save_stm_flag:
-            #     fname_04_data_stm = fname_04[:-4]+"_all_brain.npy"
-            #     np.save(fname_04_data_stm, data_stm)
+                print ("computing whole stack PCA...")
+                # if computing_whol stack, data_stm is just the aligned filter entire dataset:
+                fname = os.path.join(root_dir,'tif_files',
+                                            recording,
+                                            recording)
+                #fname_data_stm = glob.glob(fname+"_aligned_butterworth*.npy")[0]
+                fname_data_stm = glob.glob(fname+"_aligned_chebyshev_0.1hz_6.0hz*.*")[0]
 
-            # PCA denoising
-            if self.pca_etm:
+                if self.verbose:
+                    print ("fname data stm for whole stack: ", fname_data_stm)
 
+                #
+                print (" attemptint to Loading: ", fname_data_stm)
+                data_stm = np.load(fname_data_stm)
+                if self.verbose:
+                    print ("    data_stm: ", data_stm.shape)
+
+                print ("... loaded data_stm: ", data_stm.shape)
+
+
+                #
                 fname_pca = fname_04[:-4]+"_pca.pkl"
 
                 ####################################
@@ -887,105 +939,165 @@ class ProcessCalcium():
                     # save the pca object for each dataset:
                     # print (" ... saving pca: ", fname_pca)
                     pk.dump(pca, open(fname_pca,"wb"))
+                else:
+                    pca = pk.load(open(fname_pca, 'rb'))
 
-        ########################################################
-        ##### USE PCA COMPUTED ABOVE TO DENOISE WHOL STACK #####
-        ########################################################
-        # load PCA pbject
-        file = open(fname_pca, 'rb')
-        pca = pk.load(file)
+                pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters_whole_stack(pca,
+                                                                                                data_stm)
 
-        ####################################
-        ######## DENOISE DATA ##############
-        ####################################
-        # compute PCA denoised STM for regular data;
-        if self.whole_stack:
+                #
+                np.save(fname_out_temporal, pca_etm_time_filters)
+                np.save(fname_out_spatial, pca_etm_spatial_filters)
+                
+            # ok we also want to save the correct 
 
-            # if computing_whol stack, data_stm is just the aligned filter entire dataset:
-            fname = os.path.join(root_dir,'tif_files',
-                                          recording,
-                                          recording)
-            fname_data_stm = glob.glob(fname+"_aligned_butterworth*.npy")[0]
-            if self.verbose:
-                print ("fname data stm for whole stack: ", fname_data_stm)
+        # # run locanmf on the datasets
+        # loca = analysis_fig4.LocaNMFClass(root_dir, animal_id, session)
 
-            #
-            data_stm = np.load(fname_data_stm)
-            if self.verbose:
-                print ("    data_stm: ", data_stm.shape)
+        # #
+        # # loca.run_loca() # <---- this runs locanmf for segments centred on lever pulls + random data
+
+        # #
+        # loca.run_loca_whole_session() # <---- this runs locanmf on whole stack of data...
 
 
-            pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters_whole_stack(pca,
-                                                                                             data_stm)
 
-            np.save(fname_04[:-4]+"_pca"+str(self.pca_fixed_comps)+"components.npy", pca_etm_time_filters)
-            np.save(fname_04[:-4]+"_pca"+str(self.pca_fixed_comps)+"components_spatial.npy", pca_etm_spatial_filters)
+        # ########################################################
+        # ### COMPUTE DFF AND MAKE PCA OBJECT FOR TRIAL  DATA ####
+        # ########################################################
+        # if os.path.exists(fname_pca)==False or self.whole_stack==False or self.recompute==True:
+        #     data_stm = self.compute_DFF_function(
+        #                         root_dir,
+        #                         dff_method, # 'globalAverage' or 'slidingWindow'
+        #                         recording,
+        #                         locs_selected,
+        #                         n_sec_window
+        #                         )
+
+        #     # return if DFF data is none
+        #     if data_stm.shape[0]==0:
+        #         print ("data_stm is empty (could not compute stm, skipping : ", recording, " )")
+        #         return
+
+        #     # # save data_stm stack
+        #     # if save_stm_flag:
+        #     #     fname_04_data_stm = fname_04[:-4]+"_all_brain.npy"
+        #     #     np.save(fname_04_data_stm, data_stm)
+
+        #     # PCA denoising
+        #     if self.pca_etm:
+
+        #         fname_pca = fname_04[:-4]+"_pca.pkl"
+
+        #         ####################################
+        #         ######## COMPUTE PCA STACK #########
+        #         ####################################
+        #         if os.path.exists(fname_pca)==False:
+
+        #             pca = self.pca_object(data_stm)
+
+        #             # save the pca object for each dataset:
+        #             # print (" ... saving pca: ", fname_pca)
+        #             pk.dump(pca, open(fname_pca,"wb"))
+
+        # ########################################################
+        # ##### USE PCA COMPUTED ABOVE TO DENOISE WHOL STACK #####
+        # ########################################################
+        # # load PCA pbject
+        # file = open(fname_pca, 'rb')
+        # pca = pk.load(file)
+
+        # ####################################
+        # ######## DENOISE DATA ##############
+        # ####################################
+        # # compute PCA denoised STM for regular data;
+        # if self.whole_stack:
+        #     print ("computing whole stack PCA...")
+        #     # if computing_whol stack, data_stm is just the aligned filter entire dataset:
+        #     fname = os.path.join(root_dir,'tif_files',
+        #                                   recording,
+        #                                   recording)
+        #     fname_data_stm = glob.glob(fname+"_aligned_butterworth*.npy")[0]
+        #     if self.verbose:
+        #         print ("fname data stm for whole stack: ", fname_data_stm)
+
+        #     #
+        #     data_stm = np.load(fname_data_stm)
+        #     if self.verbose:
+        #         print ("    data_stm: ", data_stm.shape)
 
 
-        else:
-            pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters(pca, data_stm)
+        #     pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters_whole_stack(pca,
+        #                                                                                      data_stm)
 
-            np.save(fname_04[:-4]+"_pca_"+str(self.pca_explained_var_val)+".npy", pca_etm_time_filters)
-            np.save(fname_04[:-4]+"_pca_"+str(self.pca_explained_var_val)+"_spatial.npy", pca_etm_spatial_filters)
-
-        ########################################################
-        ########## COMPUTE CONTROL/RANDOM DATA #################
-        ########################################################
-        # generate random time courses
-        if self.feature_name!="whole_stack":
-
-            locs_selected = get_random_times_outside_locs_selected(locs_selected,
-                                                                   self.random_events_lockout,
-                                                                   data_stm)
-
-            np.savetxt(fname_04[:-4]+"_locs_selected_random.txt" , locs_selected)
+        #     np.save(fname_04[:-4]+"_pca"+str(self.pca_fixed_comps)+"components.npy", pca_etm_time_filters)
+        #     np.save(fname_04[:-4]+"_pca"+str(self.pca_fixed_comps)+"components_spatial.npy", pca_etm_spatial_filters)
 
 
-            #locs_selected = np.float32(np.linspace(30, 1100, data_stm.shape[0]))
-            #locs_selected = locs_selected + np.random.rand(locs_selected.shape[0])*10-5
-            data_stm = None # zero out data_stm
+        # else:
+        #     pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters(pca, data_stm)
 
-            #
-            # DFF for random data
-            data_stm_random = self.compute_DFF_function(
-                                    root_dir,
-                                    dff_method, # 'globalAverage' or 'slidingWindow'
-                                    recording,
-                                    locs_selected,
-                                    n_sec_window
-                                    )
+        #     np.save(fname_04[:-4]+"_pca_"+str(self.pca_explained_var_val)+".npy", pca_etm_time_filters)
+        #     np.save(fname_04[:-4]+"_pca_"+str(self.pca_explained_var_val)+"_spatial.npy", pca_etm_spatial_filters)
 
-            if data_stm_random is None or data_stm_random.shape[0]==0:
+        # ########################################################
+        # ########## COMPUTE CONTROL/RANDOM DATA #################
+        # ########################################################
+        # # generate random time courses
+        # if self.feature_name!="whole_stack":
 
-                return
+        #     locs_selected = get_random_times_outside_locs_selected(locs_selected,
+        #                                                            self.random_events_lockout,
+        #                                                            data_stm)
 
-            # pca denoise
-            if self.pca_etm:
+        #     np.savetxt(fname_04[:-4]+"_locs_selected_random.txt" , locs_selected)
 
-                # use the PCA transform from above to denoise the random data also:
-                pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters(pca, data_stm_random)
-                np.save(fname_random[:-4]+"_pca_"+str(self.pca_explained_var_val)+".npy", pca_etm_time_filters)
-                np.save(fname_random[:-4]+"_pca_"+str(self.pca_explained_var_val)+"_spatial.npy", pca_etm_spatial_filters)
 
-            else:
+        #     #locs_selected = np.float32(np.linspace(30, 1100, data_stm.shape[0]))
+        #     #locs_selected = locs_selected + np.random.rand(locs_selected.shape[0])*10-5
+        #     data_stm = None # zero out data_stm
 
-                # compute random trial time courses
-                _, trial_courses_random = self.sum_pixels_in_registered_mask(data_stm_random, maskwarp)
-                data_stm_random = None
+        #     #
+        #     # DFF for random data
+        #     data_stm_random = self.compute_DFF_function(
+        #                             root_dir,
+        #                             dff_method, # 'globalAverage' or 'slidingWindow'
+        #                             recording,
+        #                             locs_selected,
+        #                             n_sec_window
+        #                             )
 
-                #####################################################################
-                ######## REMOVE INFINITIES, NANS ETC FROM DATA ######################
-                #####################################################################
-                if trial_courses.shape[0]==0 or trial_courses_random.shape[0]==0:
-                    return np.zeros((0), 'float32'), np.zeros((0), 'float32')
+        #     if data_stm_random is None or data_stm_random.shape[0]==0:
 
-                # remove infinities from both trial and randomized data
-                trial_courses_fixed, trial_courses_random_fixed = self.fix_trials(trial_courses,
-                                                                                  trial_courses_random)
-                np.save(fname_random, trial_courses_random_fixed)
-                np.save(fname_04, trial_courses_fixed)
+        #         return
 
-        # return trial_courses_fixed, trial_courses_random_fixed
+        #     # pca denoise
+        #     if self.pca_etm:
+
+        #         # use the PCA transform from above to denoise the random data also:
+        #         pca_etm_time_filters, pca_etm_spatial_filters = self.get_pca_filters(pca, data_stm_random)
+        #         np.save(fname_random[:-4]+"_pca_"+str(self.pca_explained_var_val)+".npy", pca_etm_time_filters)
+        #         np.save(fname_random[:-4]+"_pca_"+str(self.pca_explained_var_val)+"_spatial.npy", pca_etm_spatial_filters)
+
+        #     else:
+
+        #         # compute random trial time courses
+        #         _, trial_courses_random = self.sum_pixels_in_registered_mask(data_stm_random, maskwarp)
+        #         data_stm_random = None
+
+        #         #####################################################################
+        #         ######## REMOVE INFINITIES, NANS ETC FROM DATA ######################
+        #         #####################################################################
+        #         if trial_courses.shape[0]==0 or trial_courses_random.shape[0]==0:
+        #             return np.zeros((0), 'float32'), np.zeros((0), 'float32')
+
+        #         # remove infinities from both trial and randomized data
+        #         trial_courses_fixed, trial_courses_random_fixed = self.fix_trials(trial_courses,
+        #                                                                           trial_courses_random)
+        #         np.save(fname_random, trial_courses_random_fixed)
+        #         np.save(fname_04, trial_courses_fixed)
+
+        # # return trial_courses_fixed, trial_courses_random_fixed
 
 
     def get_pca_filters_whole_stack(self, pca, data_stm):
@@ -1210,10 +1322,21 @@ class ProcessCalcium():
 
     def pca_object(self, data_stm):
 
-        X = data_stm.reshape(data_stm.shape[0]*data_stm.shape[1],
-                             data_stm.shape[2]*data_stm.shape[3])
+        if data_stm.ndim == 4:
+                # (trials, time, 128, 128)
+                X = data_stm.reshape(
+                    data_stm.shape[0]*data_stm.shape[1],
+                    data_stm.shape[2]*data_stm.shape[3]
+                )
+        elif data_stm.ndim == 3:
+            # (frames, 128, 128) → whole-stack mode
+            X = data_stm.reshape(data_stm.shape[0], -1)
+        else:
+            raise ValueError(f"Unsupported data_stm shape: {data_stm.shape}")
 
-        # subselect data
+        print("   fitting PCA on shape:", X.shape)
+
+           # subselect data
         n_selected = min(X.shape[0], 5000)
         idx = np.random.choice(np.arange(X.shape[0]),
                                n_selected,
@@ -1315,20 +1438,40 @@ class ProcessCalcium():
 
                     if  self.sessions in recording or self.sessions=='all':
 
-                        #
-                        self.compute_trial_courses_ROI_code04_trigger(recording,
-                                                               root_dir,
-                                                               feature_name,
-                                                               lockout_window,
-                                                               n_sec_window,
-                                                               recompute,
-                                                               midline_filter_flag,
-                                                               save_stm_flag,
-                                                               transform_data_flag,
-                                                               use_fixed_filter_flag,
-                                                               fname_filter,
-                                                               pca_denoise_flag)
+                        if True:
+                            #
+                            self.compute_trial_courses_ROI_code04_trigger(recording,
+                                                                root_dir,
+                                                                feature_name,
+                                                                lockout_window,
+                                                                n_sec_window,
+                                                                recompute,
+                                                                midline_filter_flag,
+                                                                save_stm_flag,
+                                                                transform_data_flag,
+                                                                use_fixed_filter_flag,
+                                                                fname_filter,
+                                                                pca_denoise_flag)
+                            
+                            # run locanmf
+                            print ("animal_id: ", name)
+                            print ("ssession : ", recording)
+                            loca = analysis_fig4.LocaNMFClass(root_dir, 
+                                                            animal_id='', 
+                                                            session=recording)
 
+                            #
+                            # loca.run_loca() # <---- this runs locanmf for segments centred on lever pulls + random data
+
+                            #
+                            loca.run_loca_whole_session() # <---- this runs locanmf on whole stack of data...
+
+                        # except Exception as e:
+                        #     print (e)
+                        #     print ("   error inprocessing skipping: ", recording)
+                        #     continue
+
+                        
 
 def get_random_times_outside_locs_selected(locs_selected,
                                            random_lockout,
